@@ -107,6 +107,16 @@ function normalizeImagePayload(payload: any): {
   };
 }
 
+function sanitizeBase64Input(v: string): string {
+  const trimmed = v.trim();
+  // Support both:
+  // - raw base64: "AAAA..."
+  // - data url: "data:image/png;base64,AAAA..."
+  const withoutPrefix = trimmed.replace(/^data:.*?;base64,/i, '');
+  // Base64 may include line breaks or spaces depending on copy source (esp. Windows).
+  return withoutPrefix.replace(/\s+/g, '');
+}
+
 function summarizeFuseInput(input: Record<string, unknown>) {
   const summary: Record<string, any> = {};
   for (const [k, v] of Object.entries(input)) {
@@ -292,7 +302,7 @@ export class JimengService {
     }
 
     const imageUrl = body.imageUrl?.trim();
-    const imageBase64 = body.imageBase64?.trim();
+    const imageBase64 = body.imageBase64 ? sanitizeBase64Input(body.imageBase64) : undefined;
     if (!imageUrl && !imageBase64) {
       throw new BadRequestException(
         '`imageUrl` or `imageBase64` is required',
@@ -353,7 +363,7 @@ export class JimengService {
       .map((u) => (typeof u === 'string' ? u.trim() : ''))
       .filter(Boolean);
     const b64s = (body.imageBase64List ?? [])
-      .map((b) => (typeof b === 'string' ? b.trim() : ''))
+      .map((b) => (typeof b === 'string' ? sanitizeBase64Input(b) : ''))
       .filter(Boolean);
 
     const total = urls.length + b64s.length;
