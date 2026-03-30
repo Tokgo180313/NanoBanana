@@ -170,17 +170,56 @@ export class JimengService {
         },
       };
     } catch (error) {
+      console.error(error);
       if (error instanceof BadRequestException) {
         throw error;
       }
 
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('HTTP 401') || message.includes('Unauthorized')) {
+      const err = error as any;
+      const status =
+        err?.statusCode ??
+        err?.status ??
+        err?.response?.status ??
+        err?.response?.statusCode ??
+        err?.$response?.status;
+
+      const looksUnauthorized =
+        status === 401 ||
+        message.includes('HTTP 401') ||
+        message.includes('Unauthorized') ||
+        message.includes('401');
+
+      if (looksUnauthorized) {
+        const reqKey = typeof input?.req_key === 'string' ? input.req_key : undefined;
         throw new UnauthorizedException({
           code: 401,
-          message: 'Volcengine unauthorized: check AK/SK, req_key permission, region and host',
-          detail:
-            'For image fusion, use a fusion-specific req_key (VOLC_IMAGE_FUSION_REQ_KEY), not text2image req_key.',
+          message:
+            'Volcengine unauthorized (401). Check req_key permission/AKSK/region/host.',
+          request: {
+            req_key: reqKey
+              ? `${String(reqKey).slice(0, 6)}...${String(reqKey).slice(-4)}`
+              : undefined,
+            region: resolvedRegion,
+            host,
+          },
+          error: message,
+        });
+      }
+
+      if (status === 400) {
+        const reqKey = typeof input?.req_key === 'string' ? input.req_key : undefined;
+        throw new BadRequestException({
+          code: 400,
+          message:
+            'Volcengine bad request (400). Please check req_key ability and request fields for image fusion.',
+          request: {
+            req_key: reqKey
+              ? `${String(reqKey).slice(0, 6)}...${String(reqKey).slice(-4)}`
+              : undefined,
+            region: resolvedRegion,
+            host,
+          },
           error: message,
         });
       }
@@ -270,14 +309,22 @@ export class JimengService {
   async fuseImages(body: FuseImagesRequest) {
     const reqKey =
       body.reqKey ?? this.configService.get('VOLC_IMAGE_FUSION_REQ_KEY');
-      console.log('reqKey', reqKey);
     if (!reqKey) {
       throw new BadRequestException(
         '`reqKey` is required (or set VOLC_IMAGE_FUSION_REQ_KEY)',
       );
     }
     const text2imageReqKey = this.configService.get('VOLC_IMAGE_REQ_KEY');
-    if (text2imageReqKey && reqKey === text2imageReqKey) {
+    const trimmedReqKey = typeof reqKey === 'string' ? reqKey.trim() : String(reqKey);
+    const trimmedText2ImageReqKey =
+      typeof text2imageReqKey === 'string'
+        ? text2imageReqKey.trim()
+        : text2imageReqKey;
+    if (
+      trimmedText2ImageReqKey &&
+      typeof trimmedText2ImageReqKey === 'string' &&
+      trimmedReqKey === trimmedText2ImageReqKey
+    ) {
       throw new BadRequestException(
         'Fusion requires a dedicated req_key. Current req_key equals VOLC_IMAGE_REQ_KEY (text2image). Please configure VOLC_IMAGE_FUSION_REQ_KEY.',
       );
@@ -297,15 +344,34 @@ export class JimengService {
       );
     }
 
+    if (urls.length > 0 && b64s.length > 0) {
+      throw new BadRequestException(
+        'Please use only one input type for fusion: `imageUrls` OR `imageBase64List`.',
+      );
+    }
+
     const prompt = body.prompt?.trim();
     const baseInput: Record<string, unknown> = {
       req_key: reqKey,
       ...(prompt ? { prompt } : {}),
-      size: body.size,
-      height: body.height,
-      width: body.width,
       ...(body.extra ?? {}),
     };
+
+    // For fusion, `size` might be interpreted by the backend as another numeric field.
+    // If user provides `size` in `WxH` form (e.g. `910x4096`), convert it to width/height integers.
+    let width: number | undefined = body.width;
+    let height: number | undefined = body.height;
+    if (typeof body.size === 'string') {
+      const m = body.size.match(/^(\d+)\s*x\s*(\d+)$/i);
+      if (m) {
+        width = Number(m[1]);
+        height = Number(m[2]);
+      }
+    }
+
+    // Only pass optional fields when they are valid numbers.
+    if (Number.isFinite(width)) baseInput.width = width;
+    if (Number.isFinite(height)) baseInput.height = height;
 
     if (urls.length > 0) {
       baseInput.image_urls = urls;
