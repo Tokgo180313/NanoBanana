@@ -107,6 +107,24 @@ function normalizeImagePayload(payload: any): {
   };
 }
 
+function summarizeFuseInput(input: Record<string, unknown>) {
+  const summary: Record<string, any> = {};
+  for (const [k, v] of Object.entries(input)) {
+    if (typeof v === 'string') {
+      if (k.toLowerCase().includes('base64') || k.toLowerCase().includes('binary')) {
+        summary[k] = `string(len=${v.length})`;
+      } else {
+        summary[k] = v.length > 80 ? `string(len=${v.length},truncated)` : v;
+      }
+    } else if (Array.isArray(v)) {
+      summary[k] = `array(len=${v.length})`;
+    } else {
+      summary[k] = typeof v;
+    }
+  }
+  return summary;
+}
+
 @Injectable()
 export class JimengService {
   constructor(private readonly configService: ConfigService) {}
@@ -221,6 +239,7 @@ export class JimengService {
             host,
           },
           error: message,
+          input_debug: input ? summarizeFuseInput(input) : undefined,
         });
       }
 
@@ -373,14 +392,15 @@ export class JimengService {
     if (Number.isFinite(width)) baseInput.width = width;
     if (Number.isFinite(height)) baseInput.height = height;
 
+    // Important: keep input fields minimal to avoid "Error when parsing request".
+    // If user already provided a field via `extra`, do not override it.
     if (urls.length > 0) {
-      baseInput.image_urls = urls;
-      baseInput.image_url_list = urls;
+      if (!('image_urls' in baseInput)) baseInput.image_urls = urls;
     }
     if (b64s.length > 0) {
-      baseInput.binary_data_base64 = b64s;
-      baseInput.image_base64_list = b64s;
-      baseInput.images = b64s;
+      if (!('image_base64_list' in baseInput)) {
+        baseInput.image_base64_list = b64s;
+      }
     }
 
     return this.callJimengCvProcess(baseInput, body.region);
