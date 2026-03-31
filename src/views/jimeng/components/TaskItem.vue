@@ -353,7 +353,7 @@ async function handleChange(
     }
   }
   if (first?.raw && !first.base64) {
-    const maxBytes = 5 * 1024 * 1024;
+    const maxBytes = 2 * 1024 * 1024;
 
     let rawFile = first.raw as File;
 
@@ -380,7 +380,7 @@ async function handleChange(
 
     if (rawFile.size > maxBytes) {
       rawFile = (await imageCompression(rawFile, {
-        maxSizeMB: 5,
+        maxSizeMB: 2,
         initialQuality: 1,
         maxIteration: 10,
         useWebWorker: true,
