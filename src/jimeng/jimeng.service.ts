@@ -223,10 +223,13 @@ export class JimengService {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   }
 
+<<<<<<< HEAD
   private async sleep(ms: number): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+=======
+>>>>>>> dd3236b (2026-03-31: 参数调整)
   private async callJimengCvProcess(
     input: Record<string, unknown>,
     region?: string,
@@ -271,6 +274,10 @@ export class JimengService {
         region: resolvedRegion,
         host,
       });
+<<<<<<< HEAD
+=======
+
+>>>>>>> dd3236b (2026-03-31: 参数调整)
       const payload = await client.send(new CvProcessCommand(input));
       const payloadAny: any = payload;
 
@@ -490,6 +497,7 @@ export class JimengService {
         })),
       ];
 
+<<<<<<< HEAD
       const pollIntervalMs = Number(
         this.configService.get('TASK_RESULT_POLL_INTERVAL_MS') ?? '2000',
       );
@@ -521,6 +529,28 @@ export class JimengService {
           } catch (e) {
             lastError = e;
           }
+=======
+      let payload: unknown;
+      let notFoundPayload: unknown;
+      let lastError: any;
+      for (const attempt of tryInputs) {
+        try {
+          const currentPayload =
+            attempt.command === 'CVSync2AsyncGetResult'
+              ? await client.send(new CvSync2AsyncGetResultCommand(attempt.input))
+              : await client.send(new CvGetResultCommand(attempt.input));
+          const p: any = currentPayload as any;
+          const status = String(p?.data?.status ?? p?.status ?? '').toLowerCase();
+          if (status === 'not_found') {
+            notFoundPayload = currentPayload;
+            continue;
+          }
+          payload = currentPayload;
+          lastError = undefined;
+          break;
+        } catch (e) {
+          lastError = e;
+>>>>>>> dd3236b (2026-03-31: 参数调整)
         }
 
         if (!payload && notFoundPayload) {
