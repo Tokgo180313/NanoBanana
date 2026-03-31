@@ -286,6 +286,7 @@ export class JimengService {
       try {
         // Prefer sending parameters with FormData as requested.
         const formDataInput = this.buildFormDataInput(input);
+        console.log('formDataInput', formDataInput);
         payload = await client.send(new CvProcessCommand(formDataInput as any));
       } catch {
         // Fallback to JSON body for compatibility with models expecting JSON input.
@@ -760,8 +761,8 @@ export class JimengService {
       if (!('image_urls' in baseInput)) baseInput.image_urls = urls;
     }
     if (b64s.length > 0) {
-      if (!('image_base64_list' in baseInput)) {
-        baseInput.image_base64_list = b64s;
+      if (!('binary_data_base64' in baseInput)) {
+        baseInput.binary_data_base64 = b64s;
       }
     }
 
