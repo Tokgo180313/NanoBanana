@@ -637,7 +637,7 @@ function submitBtn() {
 
   const timeoutId = window.setTimeout(() => {
     abortController?.abort();
-  }, 60000);
+  }, 120000);
   store.setRequestTimerId(taskId, timeoutId);
   (async () => {
     try {
