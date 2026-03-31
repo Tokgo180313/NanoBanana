@@ -211,6 +211,7 @@ function summarizeFuseInput(input: Record<string, unknown>) {
 @Injectable()
 export class JimengService {
   private readonly logger = new Logger(JimengService.name);
+  private readonly taskReqKeyMap = new Map<string, string>();
   constructor(private readonly configService: ConfigService) {}
 
   private getBase64ByteSize(base64: string): number {
@@ -223,13 +224,6 @@ export class JimengService {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-<<<<<<< HEAD
-  private async sleep(ms: number): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-=======
->>>>>>> dd3236b (2026-03-31: 参数调整)
   private async callJimengCvProcess(
     input: Record<string, unknown>,
     region?: string,
@@ -274,12 +268,20 @@ export class JimengService {
         region: resolvedRegion,
         host,
       });
-<<<<<<< HEAD
-=======
-
->>>>>>> dd3236b (2026-03-31: 参数调整)
       const payload = await client.send(new CvProcessCommand(input));
       const payloadAny: any = payload;
+      const submittedTaskId =
+        payloadAny?.data?.task_id ?? payloadAny?.task_id ?? undefined;
+      const submittedReqKey =
+        typeof input?.req_key === 'string' ? input.req_key : undefined;
+      if (
+        typeof submittedTaskId === 'string' &&
+        submittedTaskId.length > 0 &&
+        typeof submittedReqKey === 'string' &&
+        submittedReqKey.length > 0
+      ) {
+        this.taskReqKeyMap.set(submittedTaskId, submittedReqKey);
+      }
 
       const normalized = normalizeImagePayload(payload);
 
@@ -289,6 +291,7 @@ export class JimengService {
         request_id: normalized.request_id,
         data: {
           taskId: payloadAny?.data?.task_id,
+          reqKey: submittedReqKey,
           images: normalized.images,
           b64_images: normalized.b64_images,
         },
@@ -434,7 +437,8 @@ export class JimengService {
     const host =
       this.configService.get('VOLC_VISUAL_HOST') ??
       'visual.volcengineapi.com';
-    const reqKey = body.reqKey?.trim();
+    const reqKeyFromBody = body.reqKey?.trim();
+    const reqKeyFromMap = this.taskReqKeyMap.get(taskId)?.trim();
 
     try {
       const sdkCore = await import('@volcengine/sdk-core');
@@ -474,7 +478,8 @@ export class JimengService {
       });
 
       const candidateReqKeys = [
-        reqKey,
+        reqKeyFromBody,
+        reqKeyFromMap,
         this.configService.get('VOLC_IMAGE_FUSION_REQ_KEY'),
         this.configService.get('VOLC_IMAGE2IMAGE_REQ_KEY'),
         this.configService.get('VOLC_IMAGE_REQ_KEY'),
@@ -482,54 +487,23 @@ export class JimengService {
         .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
         .map((v) => v.trim());
 
+      const uniqueReqKeys = Array.from(new Set(candidateReqKeys));
+
       const tryInputs: Array<{
         command: 'CVSync2AsyncGetResult' | 'CVGetResult';
         input: Record<string, unknown>;
       }> = [
         { command: 'CVSync2AsyncGetResult', input: { task_id: taskId } },
-        ...candidateReqKeys.map((k) => ({
+        ...uniqueReqKeys.map((k) => ({
           command: 'CVSync2AsyncGetResult' as const,
           input: { task_id: taskId, req_key: k ,req_json:JSON.stringify({return_url: true})},
         })),
-        ...candidateReqKeys.map((k) => ({
+        ...uniqueReqKeys.map((k) => ({
           command: 'CVGetResult' as const,
           input: { task_id: taskId, req_key: k ,req_json:JSON.stringify({return_url: true})},
         })),
       ];
 
-<<<<<<< HEAD
-      const pollIntervalMs = Number(
-        this.configService.get('TASK_RESULT_POLL_INTERVAL_MS') ?? '2000',
-      );
-      const finalPollIntervalMs =
-        Number.isFinite(pollIntervalMs) && pollIntervalMs > 0
-          ? pollIntervalMs
-          : 2000;
-
-      // Keep polling until image/b64 result is available (no timeout limit).
-      while (true) {
-        let payload: unknown;
-        let notFoundPayload: unknown;
-        let lastError: any;
-        for (const attempt of tryInputs) {
-          try {
-            const currentPayload =
-              attempt.command === 'CVSync2AsyncGetResult'
-                ? await client.send(new CvSync2AsyncGetResultCommand(attempt.input))
-                : await client.send(new CvGetResultCommand(attempt.input));
-            const p: any = currentPayload as any;
-            const status = String(p?.data?.status ?? p?.status ?? '').toLowerCase();
-            if (status === 'not_found') {
-              notFoundPayload = currentPayload;
-              continue;
-            }
-            payload = currentPayload;
-            lastError = undefined;
-            break;
-          } catch (e) {
-            lastError = e;
-          }
-=======
       let payload: unknown;
       let notFoundPayload: unknown;
       let lastError: any;
@@ -550,71 +524,74 @@ export class JimengService {
           break;
         } catch (e) {
           lastError = e;
->>>>>>> dd3236b (2026-03-31: 参数调整)
         }
+      }
 
-        if (!payload && notFoundPayload) {
-          payload = notFoundPayload;
-        }
+      if (!payload && notFoundPayload) {
+        payload = notFoundPayload;
+      }
 
-        if (!payload && lastError) {
-          throw lastError;
-        }
+      if (!payload && lastError) {
+        throw lastError;
+      }
 
-        const payloadAny: any = payload;
-        const normalized = normalizeImagePayload(payloadAny);
-        const status = String(payloadAny?.data?.status ?? payloadAny?.status ?? '').toLowerCase();
+      if (!payload) {
+        throw new BadRequestException({
+          code: 400,
+          message:
+            'No valid query result. Please provide reqKey explicitly for task-result query.',
+          request: {
+            taskId,
+            region: resolvedRegion,
+            host,
+            reqKeyPassed: Boolean(reqKeyFromBody),
+            reqKeyFoundInMap: Boolean(reqKeyFromMap),
+            candidateReqKeyCount: uniqueReqKeys.length,
+          },
+        });
+      }
 
-        if (normalized.images.length > 0 || normalized.b64_images.length > 0) {
-          return {
-            code: 0,
-            message: 'ok',
-            request_id: normalized.request_id,
-            data: {
-              taskId,
-              status: payloadAny?.data?.status ?? payloadAny?.status,
-              images: normalized.images,
-              b64_images: normalized.b64_images,
-            },
-          };
-        }
+      const payloadAny: any = payload;
+      const normalized = normalizeImagePayload(payloadAny);
 
-        // Continue polling while task is not ready yet.
-        if (
-          status === '' ||
-          status === 'not_found' ||
-          status === 'pending' ||
-          status === 'running' ||
-          status === 'processing' ||
-          status === 'queued'
-        ) {
-          await this.sleep(finalPollIntervalMs);
-          continue;
-        }
-
-        // Terminal state without image output.
+      if (normalized.images.length > 0 || normalized.b64_images.length > 0) {
         return {
           code: 0,
           message: 'ok',
           request_id: normalized.request_id,
           data: {
             taskId,
+            reqKey: reqKeyFromBody ?? reqKeyFromMap,
             status: payloadAny?.data?.status ?? payloadAny?.status,
             images: normalized.images,
             b64_images: normalized.b64_images,
           },
-          raw: {
-            response_keys:
-              payloadAny && typeof payloadAny === 'object'
-                ? Object.keys(payloadAny).slice(0, 30)
-                : [],
-            data_keys:
-              payloadAny?.data && typeof payloadAny.data === 'object'
-                ? Object.keys(payloadAny.data).slice(0, 30)
-                : [],
-          },
         };
       }
+
+      // Terminal/non-image state
+      return {
+        code: 0,
+        message: 'ok',
+        request_id: normalized.request_id,
+        data: {
+          taskId,
+          reqKey: reqKeyFromBody ?? reqKeyFromMap,
+          status: payloadAny?.data?.status ?? payloadAny?.status,
+          images: normalized.images,
+          b64_images: normalized.b64_images,
+        },
+        raw: {
+          response_keys:
+            payloadAny && typeof payloadAny === 'object'
+              ? Object.keys(payloadAny).slice(0, 30)
+              : [],
+          data_keys:
+            payloadAny?.data && typeof payloadAny.data === 'object'
+              ? Object.keys(payloadAny.data).slice(0, 30)
+              : [],
+        },
+      };
     } catch (error) {
       const err = error as any;
       const status =
@@ -634,7 +611,8 @@ export class JimengService {
             taskId,
             region: resolvedRegion,
             host,
-            reqKeyPassed: Boolean(reqKey),
+            reqKeyPassed: Boolean(reqKeyFromBody),
+            reqKeyFoundInMap: Boolean(reqKeyFromMap),
           },
           error: message,
           raw:
