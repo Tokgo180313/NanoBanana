@@ -224,6 +224,44 @@ export class JimengService {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   }
 
+  private async normalizeBase64ImageSize(
+    base64: string,
+    maxEdge: number = 4096,
+  ): Promise<string> {
+    const clean = sanitizeBase64Input(base64);
+    const sharpModule = await import('sharp');
+    const sharp = (sharpModule as any).default ?? sharpModule;
+
+    const inputBuffer = Buffer.from(clean, 'base64');
+    const image = sharp(inputBuffer, { failOn: 'none' });
+    const metadata = await image.metadata();
+    const width = metadata.width ?? 0;
+    const height = metadata.height ?? 0;
+
+    if (width <= maxEdge && height <= maxEdge) {
+      return clean;
+    }
+
+    const resized = await image
+      .rotate()
+      .resize({
+        width: maxEdge,
+        height: maxEdge,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .toFormat(metadata.format === 'png' ? 'png' : 'jpeg', {
+        quality: 90,
+      })
+      .toBuffer();
+
+    this.logger.warn(
+      `Input image resized for Volcengine: ${width}x${height} -> max edge ${maxEdge}`,
+    );
+
+    return resized.toString('base64');
+  }
+
   private async callJimengCvProcess(
     input: Record<string, unknown>,
     region?: string,
@@ -669,7 +707,9 @@ export class JimengService {
     }
 
     const imageUrl = body.imageUrl?.trim();
-    const imageBase64 = body.imageBase64 ? sanitizeBase64Input(body.imageBase64) : undefined;
+    const imageBase64 = body.imageBase64
+      ? await this.normalizeBase64ImageSize(body.imageBase64)
+      : undefined;
     if (!imageUrl && !imageBase64) {
       throw new BadRequestException(
         '`imageUrl` or `imageBase64` is required',
@@ -739,9 +779,14 @@ export class JimengService {
     const urls = (body.imageUrls ?? [])
       .map((u) => (typeof u === 'string' ? u.trim() : ''))
       .filter(Boolean);
-    const b64s = (body.imageBase64List ?? [])
-      .map((b) => (typeof b === 'string' ? sanitizeBase64Input(b) : ''))
+    const b64sRaw = (body.imageBase64List ?? [])
+      .map((b) => (typeof b === 'string' ? b : ''))
       .filter(Boolean);
+    const b64s = (
+      await Promise.all(
+        b64sRaw.map((b64) => this.normalizeBase64ImageSize(b64)),
+      )
+    ).filter(Boolean);
 
     if (urls.length > 0) {
       this.logger.log(
