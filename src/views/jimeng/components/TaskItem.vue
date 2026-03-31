@@ -496,6 +496,42 @@ function extractTaskIdFromResp(resp: any) {
   );
 }
 
+function extractTaskStatus(resp: any): string {
+  return (
+    resp?.data?.status ??
+    resp?.status ??
+    resp?.raw?.status ??
+    resp?.data?.resp_data?.status ??
+    ""
+  );
+}
+
+function extractImageFromTaskResult(data: any): { url: string; code: string } {
+  if (!data || typeof data !== "object") return { url: "", code: "" };
+
+  const imageUrl =
+    data?.image_urls?.[0] ??
+    data?.images?.[0] ??
+    data?.resp_data?.image_urls?.[0] ??
+    data?.resp_data?.images?.[0] ??
+    "";
+  if (typeof imageUrl === "string" && imageUrl) {
+    return { url: imageUrl, code: "" };
+  }
+
+  const base64 =
+    data?.binary_data_base64?.[0] ??
+    data?.b64_images?.[0] ??
+    data?.resp_data?.binary_data_base64?.[0] ??
+    data?.resp_data?.b64_images?.[0] ??
+    "";
+  if (typeof base64 === "string" && base64) {
+    return { url: base64, code: "image/png" };
+  }
+
+  return { url: "", code: "" };
+}
+
 function waitWithAbort(ms: number, signal?: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {
@@ -709,10 +745,27 @@ function submitBtn() {
           return;
         }
 
-        firstImageUrl = taskResp.data?.images?.[0] ?? "";
-        if (!firstImageUrl && taskResp.data?.b64_images?.[0]) {
-          firstImageUrl = taskResp.data.b64_images[0];
-          imageCode = "image/png";
+        const taskStatus = extractTaskStatus(taskResp);
+        if (taskStatus === "not_found") {
+          store.setError(taskId, "任务未找到，可能已过期（12小时）或不存在");
+          return;
+        }
+        if (taskStatus === "expired") {
+          store.setError(taskId, "任务已过期，请重新提交任务");
+          return;
+        }
+
+        const extracted = extractImageFromTaskResult(taskResp.data);
+        firstImageUrl = extracted.url;
+        imageCode = extracted.code;
+
+        if (taskStatus === "done") {
+          if (firstImageUrl) break;
+          store.setError(
+            taskId,
+            `任务已完成但无图片结果：${taskResp.message ?? "unknown error"}`,
+          );
+          return;
         }
 
         if (firstImageUrl) break;
