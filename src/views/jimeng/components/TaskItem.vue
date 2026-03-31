@@ -84,7 +84,7 @@
                 list-type="picture-card"
                 :limit="1"
                 :auto-upload="false"
-                accept="image/*"
+                accept=".jpg,.jpeg,.png,image/jpeg,image/png"
                 :multiple="false"
                 :file-list="slotFiles"
                 :on-preview="handlePictureCardPreview"
@@ -343,10 +343,29 @@ async function handleChange(
   // 先立即更新 file-list，避免空态/有态切换导致的布局抖动。
   uploadSlots.value[slotIndex] = list.length ? [list[0]] : [];
   const first = list[0];
+  if (first?.raw) {
+    const fileType = (first.raw as File).type;
+    const allowed = fileType === "image/jpeg" || fileType === "image/png";
+    if (!allowed) {
+      uploadSlots.value[slotIndex] = [];
+      store.setError(String(props.taskId), "仅支持上传 JPG/JPEG 或 PNG 格式图片");
+      return;
+    }
+  }
   if (first?.raw && !first.base64) {
     const maxBytes = 5 * 1024 * 1024;
 
     let rawFile = first.raw as File;
+
+    // 兼容 .jpg：自动改成 .jpeg 文件名，MIME 保持 image/jpeg。
+    if (rawFile.type === "image/jpeg" && /\.jpg$/i.test(rawFile.name)) {
+      const jpegName = rawFile.name.replace(/\.jpg$/i, ".jpeg");
+      rawFile = new File([rawFile], jpegName, {
+        type: "image/jpeg",
+        lastModified: rawFile.lastModified,
+      });
+      first.name = jpegName;
+    }
 
     // 显示层先用 objectURL，等压缩+转 base64 完成后再切换为 data URL。
     let tempObjectUrl: string | null = null;

@@ -83,7 +83,7 @@ type SubmitParam = {
 type TaskRefName = string
 
 const submitForm = ref<SubmitParam>({
-  modelName: modelOptions[0]?.value ?? 'Banana Pro',
+  modelName: modelOptions[0]?.value ?? 'jimeng_t2i_v40',
   imageRatio: ratioOptions[0]?.value ?? '3.4',
   imageSize: sizeOptions[1]?.value ?? '4K',
 })
