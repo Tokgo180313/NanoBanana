@@ -223,18 +223,8 @@ export class JimengService {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  private buildFormDataInput(input: Record<string, unknown>): FormData {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(input)) {
-      if (value === undefined || value === null) continue;
-      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-        formData.append(key, String(value));
-        continue;
-      }
-      // Arrays/objects are stringified for stable transport in form-data.
-      formData.append(key, JSON.stringify(value));
-    }
-    return formData;
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private async callJimengCvProcess(
@@ -281,17 +271,7 @@ export class JimengService {
         region: resolvedRegion,
         host,
       });
-
-      let payload: unknown;
-      try {
-        // Prefer sending parameters with FormData as requested.
-        const formDataInput = this.buildFormDataInput(input);
-        console.log('formDataInput', formDataInput);
-        payload = await client.send(new CvProcessCommand(formDataInput as any));
-      } catch {
-        // Fallback to JSON body for compatibility with models expecting JSON input.
-        payload = await client.send(new CvProcessCommand(input));
-      }
+      const payload = await client.send(new CvProcessCommand(input));
       const payloadAny: any = payload;
 
       const normalized = normalizeImagePayload(payload);
@@ -370,6 +350,33 @@ export class JimengService {
           err?.response?.data?.error ??
           err?.response?.data?.message ??
           err?.$response?.data;
+        const upstreamMessage =
+          typeof rawData?.message === 'string'
+            ? rawData.message
+            : typeof message === 'string'
+              ? message
+              : '';
+
+        if (
+          upstreamMessage.includes('binary data width or height too large') ||
+          upstreamMessage.includes('Image Decode Error')
+        ) {
+          throw new BadRequestException({
+            code: 400,
+            message:
+              'Input image is too large to decode. Please resize/compress before upload (recommended max side <= 4096).',
+            request: {
+              req_key: reqKey
+                ? `${String(reqKey).slice(0, 6)}...${String(reqKey).slice(-4)}`
+                : undefined,
+              region: resolvedRegion,
+              host,
+            },
+            error: upstreamMessage,
+            input_debug: input ? summarizeFuseInput(input) : undefined,
+          });
+        }
+
         throw new BadRequestException({
           code: 400,
           message:
@@ -483,75 +490,101 @@ export class JimengService {
         })),
       ];
 
-      let payload: unknown;
-      let notFoundPayload: unknown;
-      let lastError: any;
-      for (const attempt of tryInputs) {
-        try {
-          let currentPayload: unknown;
+      const pollIntervalMs = Number(
+        this.configService.get('TASK_RESULT_POLL_INTERVAL_MS') ?? '2000',
+      );
+      const finalPollIntervalMs =
+        Number.isFinite(pollIntervalMs) && pollIntervalMs > 0
+          ? pollIntervalMs
+          : 2000;
+
+      // Keep polling until image/b64 result is available (no timeout limit).
+      while (true) {
+        let payload: unknown;
+        let notFoundPayload: unknown;
+        let lastError: any;
+        for (const attempt of tryInputs) {
           try {
-            const formDataInput = this.buildFormDataInput(attempt.input);
-            currentPayload =
-              attempt.command === 'CVSync2AsyncGetResult'
-                ? await client.send(
-                    new CvSync2AsyncGetResultCommand(formDataInput as any),
-                  )
-                : await client.send(new CvGetResultCommand(formDataInput as any));
-          } catch {
-            currentPayload =
+            const currentPayload =
               attempt.command === 'CVSync2AsyncGetResult'
                 ? await client.send(new CvSync2AsyncGetResultCommand(attempt.input))
                 : await client.send(new CvGetResultCommand(attempt.input));
+            const p: any = currentPayload as any;
+            const status = String(p?.data?.status ?? p?.status ?? '').toLowerCase();
+            if (status === 'not_found') {
+              notFoundPayload = currentPayload;
+              continue;
+            }
+            payload = currentPayload;
+            lastError = undefined;
+            break;
+          } catch (e) {
+            lastError = e;
           }
-          const p: any = currentPayload as any;
-          const status = String(p?.data?.status ?? p?.status ?? '').toLowerCase();
-          if (status === 'not_found') {
-            notFoundPayload = currentPayload;
-            continue;
-          }
-          payload = currentPayload;
-          lastError = undefined;
-          break;
-        } catch (e) {
-          lastError = e;
         }
+
+        if (!payload && notFoundPayload) {
+          payload = notFoundPayload;
+        }
+
+        if (!payload && lastError) {
+          throw lastError;
+        }
+
+        const payloadAny: any = payload;
+        const normalized = normalizeImagePayload(payloadAny);
+        const status = String(payloadAny?.data?.status ?? payloadAny?.status ?? '').toLowerCase();
+
+        if (normalized.images.length > 0 || normalized.b64_images.length > 0) {
+          return {
+            code: 0,
+            message: 'ok',
+            request_id: normalized.request_id,
+            data: {
+              taskId,
+              status: payloadAny?.data?.status ?? payloadAny?.status,
+              images: normalized.images,
+              b64_images: normalized.b64_images,
+            },
+          };
+        }
+
+        // Continue polling while task is not ready yet.
+        if (
+          status === '' ||
+          status === 'not_found' ||
+          status === 'pending' ||
+          status === 'running' ||
+          status === 'processing' ||
+          status === 'queued'
+        ) {
+          await this.sleep(finalPollIntervalMs);
+          continue;
+        }
+
+        // Terminal state without image output.
+        return {
+          code: 0,
+          message: 'ok',
+          request_id: normalized.request_id,
+          data: {
+            taskId,
+            status: payloadAny?.data?.status ?? payloadAny?.status,
+            images: normalized.images,
+            b64_images: normalized.b64_images,
+          },
+          raw: {
+            response_keys:
+              payloadAny && typeof payloadAny === 'object'
+                ? Object.keys(payloadAny).slice(0, 30)
+                : [],
+            data_keys:
+              payloadAny?.data && typeof payloadAny.data === 'object'
+                ? Object.keys(payloadAny.data).slice(0, 30)
+                : [],
+          },
+        };
       }
-
-      if (!payload && notFoundPayload) {
-        payload = notFoundPayload;
-      }
-
-      if (!payload && lastError) {
-        throw lastError;
-      }
-
-      const payloadAny: any = payload;
-      const normalized = normalizeImagePayload(payloadAny);
-
-      return {
-        code: 0,
-        message: 'ok',
-        request_id: normalized.request_id,
-        data: {
-          taskId,
-          status: payloadAny?.data?.status ?? payloadAny?.status,
-          images: normalized.images,
-          b64_images: normalized.b64_images,
-        },
-        raw:
-          normalized.images.length === 0 && normalized.b64_images.length === 0
-            ? {
-                response_keys:
-                  payloadAny && typeof payloadAny === 'object'
-                    ? Object.keys(payloadAny).slice(0, 30)
-                    : [],
-                data_keys:
-                  payloadAny?.data && typeof payloadAny.data === 'object'
-                    ? Object.keys(payloadAny.data).slice(0, 30)
-                    : [],
-              }
-            : undefined,
-      };
     } catch (error) {
       const err = error as any;
       const status =
