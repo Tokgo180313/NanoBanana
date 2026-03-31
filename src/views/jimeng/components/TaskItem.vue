@@ -700,7 +700,9 @@ function submitBtn() {
   store.setRequestTimerId(taskId, timeoutId);
   (async () => {
     try {
-      const isFuseModel = submitForm.value.modelName === "jimeng_t2i_v40";
+      const isFuseModel =
+        submitForm.value.modelName === "jimeng_t2i_v40" ||
+        submitForm.value.modelName === "jimeng_seedream46_cvtob";
       let firstImageUrl = "";
       let imageCode = "";
       let generatedTaskId = "";
