@@ -95,6 +95,7 @@ export async function fuseImagesApi(
 
 export interface ImageTaskResultPayload {
   taskId: string
+  reqKey?: string
 }
 
 export interface ImageTaskResultResponse {

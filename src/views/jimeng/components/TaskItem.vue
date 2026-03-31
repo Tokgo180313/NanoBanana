@@ -698,7 +698,7 @@ function submitBtn() {
       // 轮询任务结果：每 1~2 秒请求一次，直到 images 非空。
       for (let i = 0; i < 120; i++) {
         const taskResp = await getImageTaskResultApi(
-          { taskId: generatedTaskId },
+          { taskId: generatedTaskId, reqKey: submitForm.value.modelName },
           abortController?.signal,
         );
         if (taskResp.code !== 0) {
