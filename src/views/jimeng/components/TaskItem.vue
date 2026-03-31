@@ -356,10 +356,12 @@ async function handleChange(
     const maxBytes = 1 * 1024 * 1024;
 
     let rawFile = first.raw as File;
+    const shouldConvertToJpeg =
+      rawFile.type === "image/jpeg" || rawFile.type === "image/png";
 
-    // 兼容 .jpg：自动改成 .jpeg 文件名，MIME 保持 image/jpeg。
-    if (rawFile.type === "image/jpeg" && /\.jpg$/i.test(rawFile.name)) {
-      const jpegName = rawFile.name.replace(/\.jpg$/i, ".jpeg");
+    // jpg/png 输入统一改成 .jpeg 文件名，输出 MIME 统一为 image/jpeg。
+    if (shouldConvertToJpeg && !/\.jpeg$/i.test(rawFile.name)) {
+      const jpegName = rawFile.name.replace(/\.[^./\\]+$/, ".jpeg");
       rawFile = new File([rawFile], jpegName, {
         type: "image/jpeg",
         lastModified: rawFile.lastModified,
@@ -384,9 +386,30 @@ async function handleChange(
         initialQuality: 1,
         maxIteration: 10,
         useWebWorker: true,
+        ...(shouldConvertToJpeg ? { fileType: "image/jpeg" } : {}),
         // 尽量保持原图分辨率，通过降低质量来压缩到目标大小。
         alwaysKeepResolution: true,
       })) as File;
+    } else if (shouldConvertToJpeg) {
+      // 即使图片本身 < 1MB，也执行一次转换，确保 png 最终输出为 jpeg。
+      rawFile = (await imageCompression(rawFile, {
+        maxSizeMB: 1,
+        initialQuality: 1,
+        maxIteration: 1,
+        useWebWorker: true,
+        fileType: "image/jpeg",
+        alwaysKeepResolution: true,
+      })) as File;
+    }
+
+    // 压缩/转换后再次确保文件名为 .jpeg。
+    if (shouldConvertToJpeg && !/\.jpeg$/i.test(rawFile.name)) {
+      const jpegName = rawFile.name.replace(/\.[^./\\]+$/, ".jpeg");
+      rawFile = new File([rawFile], jpegName, {
+        type: "image/jpeg",
+        lastModified: rawFile.lastModified,
+      });
+      first.name = jpegName;
     }
 
     // 更新 raw/mimeType，确保后续 base64/预览等使用压缩后的文件。
