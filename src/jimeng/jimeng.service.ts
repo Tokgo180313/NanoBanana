@@ -223,6 +223,20 @@ export class JimengService {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   }
 
+  private buildFormDataInput(input: Record<string, unknown>): FormData {
+    const formData = new FormData();
+    for (const [key, value] of Object.entries(input)) {
+      if (value === undefined || value === null) continue;
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        formData.append(key, String(value));
+        continue;
+      }
+      // Arrays/objects are stringified for stable transport in form-data.
+      formData.append(key, JSON.stringify(value));
+    }
+    return formData;
+  }
+
   private async callJimengCvProcess(
     input: Record<string, unknown>,
     region?: string,
@@ -268,7 +282,15 @@ export class JimengService {
         host,
       });
 
-      const payload = await client.send(new CvProcessCommand(input));
+      let payload: unknown;
+      try {
+        // Prefer sending parameters with FormData as requested.
+        const formDataInput = this.buildFormDataInput(input);
+        payload = await client.send(new CvProcessCommand(formDataInput as any));
+      } catch {
+        // Fallback to JSON body for compatibility with models expecting JSON input.
+        payload = await client.send(new CvProcessCommand(input));
+      }
       const payloadAny: any = payload;
 
       const normalized = normalizeImagePayload(payload);
@@ -465,10 +487,21 @@ export class JimengService {
       let lastError: any;
       for (const attempt of tryInputs) {
         try {
-          const currentPayload =
-            attempt.command === 'CVSync2AsyncGetResult'
-              ? await client.send(new CvSync2AsyncGetResultCommand(attempt.input))
-              : await client.send(new CvGetResultCommand(attempt.input));
+          let currentPayload: unknown;
+          try {
+            const formDataInput = this.buildFormDataInput(attempt.input);
+            currentPayload =
+              attempt.command === 'CVSync2AsyncGetResult'
+                ? await client.send(
+                    new CvSync2AsyncGetResultCommand(formDataInput as any),
+                  )
+                : await client.send(new CvGetResultCommand(formDataInput as any));
+          } catch {
+            currentPayload =
+              attempt.command === 'CVSync2AsyncGetResult'
+                ? await client.send(new CvSync2AsyncGetResultCommand(attempt.input))
+                : await client.send(new CvGetResultCommand(attempt.input));
+          }
           const p: any = currentPayload as any;
           const status = String(p?.data?.status ?? p?.status ?? '').toLowerCase();
           if (status === 'not_found') {
