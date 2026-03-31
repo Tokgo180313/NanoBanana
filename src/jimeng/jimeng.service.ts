@@ -807,7 +807,33 @@ export class JimengService {
       }
     }
 
-    return this.callJimengCvProcess(baseInput, body.region);
+    try {
+      return await this.callJimengCvProcess(baseInput, body.region);
+    } catch (error) {
+      // Some fusion models reject `binary_data_base64` but accept `image_base64_list`.
+      // Retry once with fallback key when we detect decode/type related errors.
+      const errStr = JSON.stringify(error);
+      const shouldFallbackToImageBase64List =
+        b64s.length > 0 &&
+        errStr.includes('50207') &&
+        (errStr.includes('Image Decode Error') ||
+          errStr.includes('invalid data type') ||
+          errStr.includes('binary data width or height too large'));
+
+      if (!shouldFallbackToImageBase64List) {
+        throw error;
+      }
+
+      const fallbackInput: Record<string, unknown> = { ...baseInput };
+      delete fallbackInput.binary_data_base64;
+      fallbackInput.image_base64_list = b64s;
+
+      this.logger.warn(
+        'fuseImages fallback: retrying with image_base64_list due to decode/type error',
+      );
+
+      return this.callJimengCvProcess(fallbackInput, body.region);
+    }
   }
 }
 
