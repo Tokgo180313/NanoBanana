@@ -35,7 +35,9 @@ export interface GenerateImagesByPromptResponse {
   code: number
   message: string
   request_id?: string
+  task_id?: string
   data?: {
+    task_id?: string
     images?: string[]
     b64_images?: string[]
   }
@@ -69,7 +71,9 @@ export interface FuseImagesResponse {
   code: number
   message: string
   request_id?: string
+  task_id?: string
   data?: {
+    task_id?: string
     images?: string[]
     b64_images?: string[]
     [key: string]: unknown
@@ -87,5 +91,33 @@ export async function fuseImagesApi(
     signal,
   }
   return request<FuseImagesResponse>(config)
+}
+
+export interface ImageTaskResultPayload {
+  taskId: string
+}
+
+export interface ImageTaskResultResponse {
+  code: number
+  message: string
+  request_id?: string
+  data?: {
+    images?: string[]
+    b64_images?: string[]
+    [key: string]: unknown
+  }
+}
+
+export async function getImageTaskResultApi(
+  payload: ImageTaskResultPayload,
+  signal?: AbortSignal,
+) {
+  const config: AxiosRequestConfig<ImageTaskResultPayload> = {
+    url: '/api/images/task-result',
+    method: 'post',
+    data: payload,
+    signal,
+  }
+  return request<ImageTaskResultResponse>(config)
 }
 

@@ -210,7 +210,11 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import type { UploadFile } from "element-plus";
 import imageCompression from "browser-image-compression";
 import moment from "moment";
-import { fuseImagesApi, generateImagesByPromptApi } from "../../../api/images";
+import {
+  fuseImagesApi,
+  generateImagesByPromptApi,
+  getImageTaskResultApi,
+} from "../../../api/images";
 import { useJimengTaskStore } from "../../../stores/jimengTaskStore";
 import { modelOptions, ratioOptions, sizeOptions } from "../js/config";
 import { downloadImage } from "../../../utils/download";
@@ -463,6 +467,35 @@ async function collectImageBase64List() {
   return list.filter((x) => !!x);
 }
 
+function extractTaskIdFromResp(resp: any) {
+  return (
+    resp?.data?.taskId ??
+    resp?.taskId ??
+    resp?.data?.task_id ??
+    resp?.task_id ??
+    ""
+  );
+}
+
+function waitWithAbort(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      window.clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    signal?.addEventListener("abort", onAbort);
+  });
+}
+
 function downloadBtn() {
   if (!currentUrl.value) return;
   const src = resolveImageSrc(currentUrl.value, currentUrlCode.value);
@@ -507,15 +540,41 @@ function submitBtn() {
   const sizeParam = (() => {
     const sizeRaw = (submitForm.value.imageSize ?? "").toString().trim();
     const sizeLower = sizeRaw.toLowerCase();
+    const ratioRaw = (submitForm.value.imageRatio ?? "").toString().trim();
 
     // 若直接给了 WxH，则优先使用。
     if (/^\d+\s*x\s*\d+$/.test(sizeLower)) return sizeLower.replace(/\s+/g, "");
 
-    const ratioRaw = (submitForm.value.imageRatio ?? "").toString().trim();
+    // 优先使用官方推荐分辨率，避免自行计算带来的偏差。
+    const recommendedSizeMap: Record<string, Record<string, string>> = {
+      "2k": {
+        "21:9": "3024x1296",
+        "16:9": "2560x1440",
+        "9:16": "1440x2560",
+        "4:3": "2304x1728",
+        "3:4": "1728x2304",
+        "1:1": "2048x2048",
+        "3:2": "2496x1664",
+        "2:3": "1664x2496",
+      },
+      "4k": {
+        "21:9": "6198x2656",
+        "16:9": "5404x3040",
+        "9:16": "3040x5404",
+        "4:3": "4694x3520",
+        "3:4": "3520x4694",
+        "1:1": "4096x4096",
+        "3:2": "4992x3328",
+        "2:3": "3328x4992",
+      },
+    };
+    const recommended = recommendedSizeMap[sizeLower]?.[ratioRaw];
+    if (recommended) return recommended;
+
     const ratioMatch = ratioRaw.match(/^(\d+)\s*:\s*(\d+)$/);
     if (!ratioMatch) {
-      if (sizeLower === "2k") return "1024x1024";
-      if (sizeLower === "4k") return "2048x2048";
+      if (sizeLower === "2k") return "2048x2048";
+      if (sizeLower === "4k") return "4096x4096";
       return "512x512";
     }
 
@@ -566,11 +625,12 @@ function submitBtn() {
       const isFuseModel = submitForm.value.modelName === "jimeng_t2i_v40";
       let firstImageUrl = "";
       let imageCode = "";
+      let generatedTaskId = "";
 
       if (isFuseModel) {
         const imageBase64List = await collectImageBase64List();
-        if (imageBase64List.length < 2) {
-          store.setError(taskId, "图生图4.0 至少需要上传两张图片");
+        if (imageBase64List.length === 0) {
+          store.setError(taskId, "请至少上传一张图片");
           return;
         }
 
@@ -594,12 +654,7 @@ function submitBtn() {
           );
           return;
         }
-
-        firstImageUrl = fuseResp.data?.images?.[0] ?? "";
-        if (!firstImageUrl && fuseResp.data?.b64_images?.[0]) {
-          firstImageUrl = fuseResp.data.b64_images[0];
-          imageCode = "image/png";
-        }
+        generatedTaskId = extractTaskIdFromResp(fuseResp);
       } else {
         const json = await generateImagesByPromptApi(
           payload,
@@ -613,12 +668,40 @@ function submitBtn() {
           );
           return;
         }
+        generatedTaskId = extractTaskIdFromResp(json);
+      }
 
-        firstImageUrl = json.data?.images?.[0] ?? "";
+      if (!generatedTaskId) {
+        store.setError(taskId, "生成失败：未获取到 task_id");
+        return;
+      }
+
+      // 轮询任务结果：每 1~2 秒请求一次，直到 images 非空。
+      for (let i = 0; i < 120; i++) {
+        const taskResp = await getImageTaskResultApi(
+          { taskId: generatedTaskId },
+          abortController?.signal,
+        );
+        if (taskResp.code !== 0) {
+          store.setError(
+            taskId,
+            `查询结果失败：${taskResp.message ?? "unknown error"}`,
+          );
+          return;
+        }
+
+        firstImageUrl = taskResp.data?.images?.[0] ?? "";
+        if (!firstImageUrl && taskResp.data?.b64_images?.[0]) {
+          firstImageUrl = taskResp.data.b64_images[0];
+          imageCode = "image/png";
+        }
+
+        if (firstImageUrl) break;
+        await waitWithAbort(1500, abortController?.signal);
       }
 
       if (!firstImageUrl) {
-        store.setError(taskId, "生成失败：未获取到 images[0]");
+        store.setError(taskId, "生成失败：轮询超时，未获取到 images[0]");
         return;
       }
 
