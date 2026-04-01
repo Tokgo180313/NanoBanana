@@ -9,7 +9,7 @@ const instance = axios.create({
   // 使用相对路径，让浏览器请求走同域，再由 Vite `server.proxy` 转发到后端，
   // 从而避免跨域问题。
   baseURL: '',
-  timeout: 60000,
+  timeout: 0,
 })
 
 instance.interceptors.request.use(

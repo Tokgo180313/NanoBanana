@@ -77,7 +77,7 @@
               @dragleave.prevent="
                 draggingSlot = draggingSlot === slotIndex ? null : draggingSlot
               "
-              @drop.prevent="draggingSlot = null"
+              @drop.prevent="onUploadDrop(slotIndex, $event)"
             >
               <el-upload
                 v-if="slotFiles.length === 0"
@@ -424,6 +424,32 @@ async function handleChange(
   }
 }
 
+function isAllowedImageFile(file: File) {
+  if (file.type === "image/jpeg" || file.type === "image/png") return true;
+  return /\.(jpe?g|png)$/i.test(file.name);
+}
+
+async function onUploadDrop(slotIndex: number, e: DragEvent) {
+  draggingSlot.value = null;
+  const dt = e.dataTransfer;
+  if (!dt?.files?.length) return;
+  const files = Array.from(dt.files);
+  const imageFile = files.find((f) => isAllowedImageFile(f));
+  if (!imageFile) {
+    store.setError(String(props.taskId), "仅支持上传 JPG/JPEG 或 PNG 格式图片");
+    return;
+  }
+  const prevUrl = uploadSlots.value[slotIndex]?.[0]?.url;
+  if (prevUrl?.startsWith("blob:")) URL.revokeObjectURL(prevUrl);
+  const uploadFile = {
+    uid: Date.now(),
+    name: imageFile.name,
+    status: "ready" as const,
+    raw: imageFile,
+  } as UploadWithMeta;
+  await handleChange(slotIndex, uploadFile, [uploadFile]);
+}
+
 function handleRemove(
   slotIndex: number,
   _uploadFile: UploadFile,
@@ -601,12 +627,12 @@ function viewHistoryEvent(item: HistoryImage) {
 }
 
 function submitBtn() {
-  const taskId = String(props.taskId);
-  store.ensureTask(taskId);
   if (!currentText.value.trim()) {
-    store.setError(taskId, "请输入图片生成描述词...");
     return;
   }
+
+  const taskId = String(props.taskId);
+  store.ensureTask(taskId);
 
   // 调用后端生成接口；后端返回的是 `images[0]` URL。
   abortRequestedByUser = false;
