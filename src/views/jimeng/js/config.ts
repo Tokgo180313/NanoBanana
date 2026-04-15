@@ -5,10 +5,11 @@ export interface OptionItem {
 }
 
 export const modelOptions: OptionItem[] = [
-  { label: "图生图4.6", value: "jimeng_seedream46_cvtob", version: "1" },
-  { label: "图生图4.0", value: "jimeng_t2i_v40", version: "1" },
-  { label: "文生图3.0", value: "jimeng_3.0", version: "1" },
-  { label: "文生图3.1", value: "jimeng_3.1", version: "1" },
+  // { label: "图生图4.6", value: "jimeng_seedream46_cvtob", version: "1" },
+  // { label: "图生图4.0", value: "jimeng_t2i_v40", version: "1" },
+  // { label: "文生图3.0", value: "jimeng_3.0", version: "1" },
+  // { label: "文生图3.1", value: "jimeng_3.1", version: "1" },
+  { label: "Doubao-Seedream-5.0", value: "doubao-seedream-5-0-260128", version: "1" },
 ];
 
 export const ratioOptions: OptionItem[] = [

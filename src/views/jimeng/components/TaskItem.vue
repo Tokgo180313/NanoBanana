@@ -88,14 +88,8 @@
                 :multiple="false"
                 :file-list="slotFiles"
                 :on-preview="handlePictureCardPreview"
-                :on-remove="
-                  (uploadFile, uploadFiles) =>
-                    handleRemove(slotIndex, uploadFile, uploadFiles)
-                "
-                :on-change="
-                  (uploadFile, uploadFiles) =>
-                    handleChange(slotIndex, uploadFile, uploadFiles)
-                "
+                :on-remove="getRemoveHandler(slotIndex)"
+                :on-change="getChangeHandler(slotIndex)"
                 class="picture-wall"
               >
                 <template #default>
@@ -154,7 +148,7 @@
 
           <div
             class="submit-button button"
-            @click="submitBtn"
+            @click="submitBtn2"
             :disabled="responseLoading"
             :class="responseLoading ? 'diabled-use' : ''"
           >
@@ -213,6 +207,7 @@ import moment from "moment";
 import {
   fuseImagesApi,
   generateImagesByPromptApi,
+  generateImagesByPromptV2Api,
   getImageTaskResultApi,
 } from "../../../api/images";
 import { useJimengTaskStore } from "../../../stores/jimengTaskStore";
@@ -249,7 +244,7 @@ const uploadSlots = ref<UploadWithMeta[][]>(
 const draggingSlot = ref<number | null>(null);
 
 const submitForm = ref<SubmitParam>({
-  modelName: modelOptions[0]?.value ?? "Banana Pro",
+  modelName: modelOptions[0]?.value ?? "jimeng_seedream46_cvtob",
   imageRatio: ratioOptions[0]?.value ?? "3.4",
   imageSize: sizeOptions[0]?.value ?? "4K",
 });
@@ -459,6 +454,16 @@ function handleRemove(
   uploadSlots.value[slotIndex] = list.length ? [list[0]] : [];
 }
 
+function getChangeHandler(slotIndex: number) {
+  return (uploadFile: UploadFile, uploadFiles: UploadFile[]) =>
+    handleChange(slotIndex, uploadFile, uploadFiles);
+}
+
+function getRemoveHandler(slotIndex: number) {
+  return (uploadFile: UploadFile, uploadFiles: UploadFile[]) =>
+    handleRemove(slotIndex, uploadFile, uploadFiles);
+}
+
 async function handlePictureCardPreview(
   file: UploadFile & { base64?: string; mimeType?: string },
 ) {
@@ -532,6 +537,35 @@ async function collectImageBase64List() {
       return "";
     }),
   );
+  return list.filter((x) => !!x);
+}
+
+async function collectImageDataUrlList() {
+  const slots = uploadSlots.value
+    .map((slot) => slot[0])
+    .filter(Boolean) as UploadWithMeta[];
+
+  const list = await Promise.all(
+    slots.map(async (file) => {
+      if (file.url && /^data:image\/[^;]+;base64,/.test(file.url)) {
+        return file.url;
+      }
+      if (file.raw) {
+        const dataUrl = await getBase64(file.raw as File);
+        const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, "");
+        file.base64 = base64;
+        file.mimeType = (file.raw as File).type;
+        file.url = dataUrl;
+        return dataUrl;
+      }
+      if (file.base64) {
+        const mime = file.mimeType || "image/png";
+        return `data:${mime};base64,${file.base64}`;
+      }
+      return "";
+    }),
+  );
+
   return list.filter((x) => !!x);
 }
 
@@ -842,8 +876,64 @@ function submitBtn() {
   })();
 }
 
+function submitBtn2() {
+  if (!currentText.value.trim()) {
+    return;
+  }
+
+  const taskId = String(props.taskId);
+  store.ensureTask(taskId);
+
+  abortRequestedByUser = false;
+  abortController?.abort();
+  abortController = new AbortController();
+
+  store.startTask(taskId);
+
+  const timeoutId = window.setTimeout(() => {
+    abortController?.abort();
+  }, 120000);
+  store.setRequestTimerId(taskId, timeoutId);
+
+  (async () => {
+    try {
+      const imageDataUrlList = await collectImageDataUrlList();
+      const imageField =
+        imageDataUrlList.length <= 1 ? imageDataUrlList[0] : imageDataUrlList;
+
+      const payload = {
+        model: submitForm.value.modelName,
+        prompt: currentText.value.trim(),
+        image: imageField,
+      };
+
+      const resp = await generateImagesByPromptV2Api(payload, abortController?.signal);
+      const firstUrl =
+        resp?.data?.[0]?.url ??
+        (Array.isArray(resp?.data) ? "" : (resp as any)?.data?.url) ??
+        (resp as any)?.url ??
+        "";
+      if (!firstUrl) {
+        store.setError(taskId, "生成失败：V2 接口未返回图片 URL");
+        return;
+      }
+
+      store.completeTaskWithPlaceholder(taskId, {
+        url: firstUrl,
+        code: "",
+        context: currentText.value,
+      });
+    } catch (err: any) {
+      if (abortRequestedByUser) return;
+      const msg = err?.message ?? "V2 生成失败：请求已中断或超时";
+      store.setError(taskId, msg);
+    }
+  })();
+}
+
 defineExpose({
   submitBtn,
+  submitBtn2,
   downloadBtn,
   clearTextBtn,
   clearImagesBtn,

@@ -22,6 +22,19 @@ export async function generateImageApi(
   return request<GenerateImageResponse>(config)
 }
 
+export async function generateImageV2Api(
+  formData: FormData,
+  signal?: AbortSignal,
+) {
+  const config: AxiosRequestConfig<FormData> = {
+    url: '/api/image/generate2',
+    method: 'post',
+    data: formData,
+    signal,
+  }
+  return request<GenerateImageResponse>(config)
+}
+
 export interface GenerateImagesByPromptPayload {
   prompt: string
   size: string
@@ -43,6 +56,36 @@ export interface GenerateImagesByPromptResponse {
   }
 }
 
+export interface GenerateImagesByPromptV2Response {
+  model?: string
+  created?: number
+  data?: Array<{
+    url?: string
+    size?: string
+  }>
+  usage?: {
+    generated_images?: number
+    output_tokens?: number
+    total_tokens?: number
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
+export interface GenerateImagesByPromptV2Payload {
+  model?: string
+  prompt?: string
+  image?: string | string[]
+  sequentialImageGeneration?: 'enabled' | 'disabled'
+  responseFormat?: 'url' | 'b64_json'
+  size?: string
+  stream?: boolean
+  watermark?: boolean
+  apiKey?: string
+  endpoint?: string
+  extra?: Record<string, unknown>
+}
+
 export async function generateImagesByPromptApi(
   payload: GenerateImagesByPromptPayload,
   signal?: AbortSignal,
@@ -56,12 +99,26 @@ export async function generateImagesByPromptApi(
   return request<GenerateImagesByPromptResponse>(config)
 }
 
+export async function generateImagesByPromptV2Api(
+  payload: GenerateImagesByPromptV2Payload,
+  signal?: AbortSignal,
+) {
+  const config: AxiosRequestConfig<GenerateImagesByPromptV2Payload> = {
+    url: '/api/image/generate2',
+    method: 'post',
+    data: payload,
+    signal,
+  }
+  return request<GenerateImagesByPromptV2Response>(config)
+}
+
 export interface FuseImagesPayload {
-  /** 多张图片 URL */
   imageUrls?: string[]
-  /** 多张图片 Base64（不含 data: 前缀或含均可，需与即梦文档一致） */
   imageBase64List?: string[]
   prompt?: string
+  size?: string
+  width?: number
+  height?: number
   reqKey?: string
   region?: string
   extra?: Record<string, unknown>
