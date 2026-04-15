@@ -50,6 +50,20 @@ export type QueryTaskResultRequest = {
   region?: string;
 };
 
+export type GenerateImage2Request = {
+  model?: string;
+  prompt?: string;
+  image?: string | string[];
+  sequentialImageGeneration?: 'enabled' | 'disabled';
+  responseFormat?: 'url' | 'b64_json';
+  size?: string;
+  stream?: boolean;
+  watermark?: boolean;
+  apiKey?: string;
+  endpoint?: string;
+  extra?: Record<string, unknown>;
+};
+
 function normalizeImagePayload(payload: any): {
   images: string[];
   b64_images: string[];
@@ -881,6 +895,115 @@ export class JimengService {
 
       return this.callJimengCvProcess(fallbackInput, body.region);
     }
+  }
+
+  async generateImage2(body: GenerateImage2Request) {
+    const prompt = body.prompt?.trim();
+    if (!prompt) {
+      throw new BadRequestException('`prompt` is required');
+    }
+
+    const model =
+      body.model?.trim() ?? this.configService.get<string>('ARK_IMAGE_MODEL');
+    if (!model) {
+      throw new BadRequestException(
+        '`model` is required (or set ARK_IMAGE_MODEL)',
+      );
+    }
+
+    const apiKey = body.apiKey?.trim() ?? this.configService.get<string>('ARK_API_KEY');
+    if (!apiKey) {
+      throw new InternalServerErrorException(
+        'Missing ARK_API_KEY in environment variables',
+      );
+    }
+
+    const endpoint =
+      body.endpoint?.trim() ??
+      this.configService.get<string>('ARK_IMAGE_GENERATIONS_ENDPOINT') ??
+      'https://ark.cn-beijing.volces.com/api/v3/images/generations';
+
+    const payload: Record<string, unknown> = {
+      model,
+      prompt,
+      sequential_image_generation: body.sequentialImageGeneration ?? 'disabled',
+      response_format: body.responseFormat ?? 'url',
+      size: body.size ?? '2K',
+      stream: body.stream ?? false,
+      watermark: body.watermark ?? true,
+      ...(body.extra ?? {}),
+    };
+
+    if (body.image !== undefined) {
+      payload.image = body.image;
+    }
+// console.log(payload);
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      console.error(
+        `generateImage2 fetch failed: endpoint=${endpoint}, message=${message}`,
+        stack,
+      );
+      throw error;
+    }
+    console.log(response);
+    const rawText = await response.text();
+    let parsed: unknown = rawText;
+    try {
+      parsed = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      // Keep original text for debugging if upstream doesn't return JSON.
+    }
+
+    if (!response.ok) {
+      const upstreamMessage =
+        typeof (parsed as any)?.error?.message === 'string'
+          ? (parsed as any).error.message
+          : typeof (parsed as any)?.message === 'string'
+            ? (parsed as any).message
+            : `ARK request failed with status ${response.status}`;
+
+      if (response.status === 401) {
+        throw new UnauthorizedException({
+          code: 401,
+          message: 'ARK unauthorized (401). Check ARK_API_KEY.',
+          error: upstreamMessage,
+          raw: parsed,
+        });
+      }
+
+      throw new BadRequestException({
+        code: response.status,
+        message: upstreamMessage,
+        raw: parsed,
+      });
+    }
+
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      // Return ARK-compatible response shape directly.
+      return parsed;
+    }
+
+    const normalized = normalizeImagePayload(parsed);
+    return {
+      model,
+      created: Math.floor(Date.now() / 1000),
+      data: normalized.images.map((url) => ({ url })),
+      usage: {
+        generated_images: normalized.images.length,
+      },
+    };
   }
 }
 

@@ -4,6 +4,7 @@ import {
   type FuseImagesRequest,
   type GenerateImageByImageRequest,
   type GenerateImageRequest,
+  type GenerateImage2Request,
   type QueryTaskResultRequest,
 } from './jimeng.service';
 
@@ -41,6 +42,14 @@ export class JimengController {
     body: QueryTaskResultRequest,
   ) {
     return this.jimengService.queryTaskResult(body);
+  }
+
+  @Post('/image/generate2')
+  async generateImage2(
+    @Body()
+    body: GenerateImage2Request,
+  ) {
+    return this.jimengService.generateImage2(body);
   }
 }
 
