@@ -127,7 +127,7 @@ function applyDownloadBtn() {
 }
 
 function applyRequestBtn() {
-  for (const t of taskList.value) taskRefs.value[t.ref]?.submitBtn?.()
+  for (const t of taskList.value) taskRefs.value[t.ref]?.submitBtn2??.()
 }
 
 function addTaskBtn() {
