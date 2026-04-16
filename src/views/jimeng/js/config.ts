@@ -27,7 +27,7 @@ export const ratioOptions: OptionItem[] = [
 export const sizeOptions: OptionItem[] = [
   { label: "2K", value: "2K", version: "1" },
   { label: "3K", value: "3K", version: "1" },
-  // { label: "4K", value: "4K", version: "1" },
+  { label: "4K", value: "4K", version: "1" },
 ];
 export const recommendedSizeMap: Record<string, Record<string, string>> = {
   "2K": {
