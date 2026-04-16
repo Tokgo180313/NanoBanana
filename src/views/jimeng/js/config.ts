@@ -11,6 +11,9 @@ export const modelOptions: OptionItem[] = [
   // { label: "文生图3.1", value: "jimeng_3.1", version: "1" },
   { label: "Doubao-Seedream-4.5", value: "doubao-seedream-4-5-251128", version: "1" },
   { label: "Doubao-Seedream-5.0", value: "doubao-seedream-5-0-260128", version: "1" },
+  { label: "qwen-image-2.0-pro", value: "qwen-image-2.0-pro", version: "1" },
+  { label: "wan2.7-image-pro", value: "wan2.7-image-pro", version: "1" },
+  { label: "wan2.7-image", value: "wan2.7-image", version: "1" },
 ];
 
 export const ratioOptions: OptionItem[] = [
@@ -50,7 +53,7 @@ export const recommendedSizeMap: Record<string, Record<string, string>> = {
     "3:2": "3072x2048",
     "2:3": "2048x3072",
   },
-  "4k": {
+  "4K": {
     "21:9": "6198x2656",
     "16:9": "5404x3040",
     "9:16": "3040x5404",

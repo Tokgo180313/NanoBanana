@@ -86,6 +86,51 @@ export interface GenerateImagesByPromptV2Payload {
   extra?: Record<string, unknown>
 }
 
+export interface QianwenImagePayload {
+  model: string
+  input: {
+    messages: Array<{
+      role: 'user' | 'assistant' | 'system'
+      content: Array<
+        | {
+            text: string
+          }
+        | {
+            image: string
+          }
+      >
+    }>
+  }
+  parameters?: {
+    prompt_extend?: boolean
+    watermark?: boolean
+    n?: number
+    enable_interleave?: boolean
+    size?: string
+    [key: string]: unknown
+  }
+}
+
+export interface QianwenImageResponse {
+  output?: {
+    choices?: Array<{
+      finish_reason?: string
+      message?: {
+        role?: string
+        content?: Array<{
+          image?: string
+          type?: string
+          [key: string]: unknown
+        }>
+      }
+    }>
+    finished?: boolean
+  }
+  usage?: Record<string, unknown>
+  request_id?: string
+  [key: string]: unknown
+}
+
 export async function generateImagesByPromptApi(
   payload: GenerateImagesByPromptPayload,
   signal?: AbortSignal,
@@ -110,6 +155,19 @@ export async function generateImagesByPromptV2Api(
     signal,
   }
   return request<GenerateImagesByPromptV2Response>(config)
+}
+
+export async function qianwenImageApi(
+  payload: QianwenImagePayload,
+  signal?: AbortSignal,
+) {
+  const config: AxiosRequestConfig<QianwenImagePayload> = {
+    url: '/api/image/qianwen',
+    method: 'post',
+    data: payload,
+    signal,
+  }
+  return request<QianwenImageResponse>(config)
 }
 
 export interface FuseImagesPayload {

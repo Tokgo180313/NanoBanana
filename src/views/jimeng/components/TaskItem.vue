@@ -209,6 +209,7 @@ import {
   generateImagesByPromptApi,
   generateImagesByPromptV2Api,
   getImageTaskResultApi,
+  qianwenImageApi,
 } from "../../../api/images";
 import { useJimengTaskStore } from "../../../stores/jimengTaskStore";
 import { modelOptions, ratioOptions, sizeOptions } from "../js/config";
@@ -572,6 +573,24 @@ async function collectImageDataUrlList() {
   return list.filter((x) => !!x);
 }
 
+function validateUploadSizeLimit(taskId: string) {
+  const maxBytes = 20 * 1024 * 1024;
+  const files = uploadSlots.value
+    .map((slot) => slot[0])
+    .filter(Boolean) as UploadWithMeta[];
+
+  for (const file of files) {
+    const raw = file.raw as File | undefined;
+    if (!raw) continue;
+    if (raw.size > maxBytes) {
+      store.setError(taskId, "上传图片大小不能超过20MB");
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function extractTaskIdFromResp(resp: any) {
   return (
     resp?.data?.taskId ??
@@ -908,44 +927,140 @@ function submitBtn2() {
   }, 120000);
   store.setRequestTimerId(taskId, timeoutId);
 
-  (async () => {
-    try {
-      const imageDataUrlList = await collectImageDataUrlList();
-      const imageField =
-        imageDataUrlList.length <= 1 ? imageDataUrlList[0] : imageDataUrlList;
-      const payload = {
-        model: submitForm.value.modelName,
-        prompt:
-          currentText.value.trim() + `。返回的图片宽高像素值为${recommendedSizeMap[submitForm.value.imageSize]?.[submitForm.value.imageRatio]}。`,
-        image: imageField,
-        size: submitForm.value.imageSize,
-      };
-      const resp = await generateImagesByPromptV2Api(
-        payload,
-        abortController?.signal,
-      );
-      const firstUrl =
-        resp?.data?.[0]?.url ??
-        (Array.isArray(resp?.data) ? "" : (resp as any)?.data?.url) ??
-        (resp as any)?.url ??
-        "";
-      if (!firstUrl) {
-        store.setError(taskId, "生成失败：V2 接口未返回图片 URL");
-        return;
-      }
+  const selectedModel = submitForm.value.modelName;
+  const isDoubaoModel =
+    selectedModel === "doubao-seedream-4-5-251128" ||
+    selectedModel === "doubao-seedream-5-0-260128";
 
-      store.completeTaskWithPlaceholder(taskId, {
-        url: firstUrl,
-        code: "",
-        context: currentText.value,
-      });
-    } catch (err: any) {
-      console.log(err);
-      if (abortRequestedByUser) return;
-      const msg = err?.message ?? "V2 生成失败：请求已中断或超时";
-      store.setError(taskId, msg);
+  if (isDoubaoModel) {
+    void doubaoImageImpl(taskId);
+    return;
+  }
+
+  const isQianwenModel =
+    selectedModel === "qwen-image-2.0-pro" ||
+    selectedModel === "wan2.7-image-pro" ||
+    selectedModel === "wan2.7-image";
+
+  if (isQianwenModel) {
+    void qianwenImageImpl(taskId);
+    return;
+  }
+
+  store.setError(taskId, "当前模型未接入 submitBtn2 逻辑");
+}
+
+async function doubaoImageImpl(taskId: string) {
+  try {
+    if (!validateUploadSizeLimit(taskId)) return;
+
+    const imageDataUrlList = await collectImageDataUrlList();
+    const imageField =
+      imageDataUrlList.length <= 1 ? imageDataUrlList[0] : imageDataUrlList;
+    const payload = {
+      model: submitForm.value.modelName,
+      prompt:
+        currentText.value.trim() +
+        `。返回的图片宽高像素值为${recommendedSizeMap[submitForm.value.imageSize]?.[submitForm.value.imageRatio]}。`,
+      image: imageField,
+      size: submitForm.value.imageSize,
+    };
+    const resp = await generateImagesByPromptV2Api(
+      payload,
+      abortController?.signal,
+    );
+    const firstUrl =
+      resp?.data?.[0]?.url ??
+      (Array.isArray(resp?.data) ? "" : (resp as any)?.data?.url) ??
+      (resp as any)?.url ??
+      "";
+    if (!firstUrl) {
+      store.setError(taskId, "生成失败：V2 接口未返回图片 URL");
+      return;
     }
-  })();
+
+    store.completeTaskWithPlaceholder(taskId, {
+      url: firstUrl,
+      code: "",
+      context: currentText.value,
+    });
+  } catch (err: any) {
+    if (abortRequestedByUser) return;
+    const msg = err?.message ?? "V2 生成失败：请求已中断或超时";
+    store.setError(taskId, msg);
+  }
+}
+
+async function qianwenImageImpl(taskId: string) {
+  try {
+    if (!validateUploadSizeLimit(taskId)) return;
+
+    const imageDataUrlList = await collectImageDataUrlList();
+    const size =
+      submitForm.value.modelName === "qwen-image-2.0-pro"
+        ? recommendedSizeMap[submitForm.value.imageSize]?.[
+            submitForm.value.imageRatio
+          ]
+        : submitForm.value.imageSize;
+    const content: Array<{ text: string } | { image: string }> = [
+      {
+        text:
+          currentText.value.trim() +
+          `。返回的图片宽高像素值为${
+            recommendedSizeMap[submitForm.value.imageSize]?.[
+              submitForm.value.imageRatio
+            ]
+          }。`,
+      },
+    ];
+
+    imageDataUrlList.forEach((img) => {
+      content.push({ image: img });
+    });
+
+    const payload = {
+      model: submitForm.value.modelName,
+      input: {
+        messages: [
+          {
+            role: "user" as const,
+            content,
+          },
+        ],
+      },
+      parameters: {
+        prompt_extend: true,
+        watermark: false,
+        n: 1,
+        enable_interleave: false,
+        size:size.replace("x", "*"),
+      },
+    };
+
+    const resp = await qianwenImageApi(payload, abortController?.signal);
+    const firstUrl =
+      resp?.output?.choices?.[0]?.message?.content?.find(
+        (item: any) =>
+          item?.type === "image" && typeof item?.image === "string",
+      )?.image ??
+      resp?.output?.choices?.[0]?.message?.content?.[0]?.image ??
+      "";
+
+    if (!firstUrl) {
+      store.setError(taskId, "生成失败：千问接口未返回图片 URL");
+      return;
+    }
+
+    store.completeTaskWithPlaceholder(taskId, {
+      url: firstUrl,
+      code: "",
+      context: currentText.value,
+    });
+  } catch (err: any) {
+    if (abortRequestedByUser) return;
+    const msg = err?.message ?? "千问生成失败：请求已中断或超时";
+    store.setError(taskId, msg);
+  }
 }
 
 defineExpose({
