@@ -64,6 +64,22 @@ export type GenerateImage2Request = {
   extra?: Record<string, unknown>;
 };
 
+export type QianwenImageRequest = {
+  model?: string;
+  input?: {
+    messages?: Array<{
+      role?: string;
+      content?: Array<{
+        image?: string;
+        text?: string;
+      }>;
+    }>;
+  };
+  parameters?: Record<string, unknown>;
+  apiKey?: string;
+  endpoint?: string;
+};
+
 function normalizeImagePayload(payload: any): {
   images: string[];
   b64_images: string[];
@@ -928,7 +944,7 @@ export class JimengService {
       prompt,
       sequential_image_generation: body.sequentialImageGeneration ?? 'disabled',
       response_format: body.responseFormat ?? 'url',
-      size: body.size ?? '2K',
+      size: body.size ?? '3K',
       stream: body.stream ?? false,
       watermark: body.watermark ?? true,
       ...(body.extra ?? {}),
@@ -937,7 +953,6 @@ export class JimengService {
     if (body.image !== undefined) {
       payload.image = body.image;
     }
-// console.log(payload);
     let response: Response;
     try {
       response = await fetch(endpoint, {
@@ -951,13 +966,12 @@ export class JimengService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const stack = error instanceof Error ? error.stack : undefined;
-      console.error(
+      this.logger.error(
         `generateImage2 fetch failed: endpoint=${endpoint}, message=${message}`,
         stack,
       );
       throw error;
     }
-    console.log(response);
     const rawText = await response.text();
     let parsed: unknown = rawText;
     try {
@@ -1004,6 +1018,96 @@ export class JimengService {
         generated_images: normalized.images.length,
       },
     };
+  }
+
+  async qianwenImage(body: QianwenImageRequest) {
+    const model =
+      body.model?.trim() ??
+      this.configService.get<string>('QIANWEN_IMAGE_MODEL') ??
+      'wan2.7-image-pro';
+    const input = body.input;
+    if (!input || !Array.isArray(input.messages) || input.messages.length === 0) {
+      throw new BadRequestException('`input.messages` is required');
+    }
+
+    const apiKey =
+      body.apiKey?.trim() ?? this.configService.get<string>('DASHSCOPE_API_KEY');
+    if (!apiKey) {
+      throw new InternalServerErrorException(
+        'Missing DASHSCOPE_API_KEY in environment variables',
+      );
+    }
+
+    const endpoint =
+      body.endpoint?.trim() ??
+      this.configService.get<string>('QIANWEN_IMAGE_ENDPOINT') ??
+      'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
+
+    const payload: Record<string, unknown> = {
+      model,
+      input,
+      parameters: body.parameters ?? {
+        n: 1,
+        negative_prompt: ' ',
+        prompt_extend: true,
+        watermark: false,
+        size: '1024*1536',
+      },
+    };
+
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(
+        `qianwenImage fetch failed: endpoint=${endpoint}, message=${message}`,
+        stack,
+      );
+      throw error;
+    }
+
+    const rawText = await response.text();
+    let parsed: unknown = rawText;
+    try {
+      parsed = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      // Keep original text for debugging if upstream doesn't return JSON.
+    }
+
+    if (!response.ok) {
+      const upstreamMessage =
+        typeof (parsed as any)?.message === 'string'
+          ? (parsed as any).message
+          : typeof (parsed as any)?.code === 'string'
+            ? `${(parsed as any).code}: request failed`
+            : `Qianwen request failed with status ${response.status}`;
+
+      if (response.status === 401) {
+        throw new UnauthorizedException({
+          code: 401,
+          message: 'Qianwen unauthorized (401). Check DASHSCOPE_API_KEY.',
+          error: upstreamMessage,
+          raw: parsed,
+        });
+      }
+
+      throw new BadRequestException({
+        code: response.status,
+        message: upstreamMessage,
+        raw: parsed,
+      });
+    }
+
+    return parsed;
   }
 }
 

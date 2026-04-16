@@ -5,6 +5,7 @@ import {
   type GenerateImageByImageRequest,
   type GenerateImageRequest,
   type GenerateImage2Request,
+  type QianwenImageRequest,
   type QueryTaskResultRequest,
 } from './jimeng.service';
 
@@ -50,6 +51,14 @@ export class JimengController {
     body: GenerateImage2Request,
   ) {
     return this.jimengService.generateImage2(body);
+  }
+
+  @Post('/image/qianwen')
+  async qianwenImage(
+    @Body()
+    body: QianwenImageRequest,
+  ) {
+    return this.jimengService.qianwenImage(body);
   }
 }
 
