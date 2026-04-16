@@ -10,6 +10,7 @@ export const modelOptions: OptionItem[] = [
   // { label: "文生图3.0", value: "jimeng_3.0", version: "1" },
   // { label: "文生图3.1", value: "jimeng_3.1", version: "1" },
   { label: "Doubao-Seedream-5.0", value: "doubao-seedream-5-0-260128", version: "1" },
+  { label: "Doubao-Seedream-4.5", value: "doubao-seedream-4-5-251128", version: "1" },
 ];
 
 export const ratioOptions: OptionItem[] = [
@@ -25,5 +26,38 @@ export const ratioOptions: OptionItem[] = [
 
 export const sizeOptions: OptionItem[] = [
   { label: "2K", value: "2K", version: "1" },
-  { label: "4K", value: "4K", version: "1" },
+  { label: "3K", value: "3K", version: "1" },
+  // { label: "4K", value: "4K", version: "1" },
 ];
+export const recommendedSizeMap: Record<string, Record<string, string>> = {
+  "2K": {
+    "1:1": "2048x2048",
+    "21:9": "2560x1296",
+    "16:9": "2560x1440",
+    "9:16": "1440x2560",
+    "4:3": "2304x1728",
+    "3:4": "1728x2304",
+    "3:2": "2496x1664",
+    "2:3": "1664x2496",
+  },
+  "3K": {
+    "1:1": "3072x3072",
+    "21:9": "3840x1728",
+    "16:9": "3840x2160",
+    "9:16": "2160x3840",
+    "4:3": "3072x2304",
+    "3:4": "2304x3072",
+    "3:2": "3072x2048",
+    "2:3": "2048x3072",
+  },
+  "4k": {
+    "21:9": "6198x2656",
+    "16:9": "5404x3040",
+    "9:16": "3040x5404",
+    "4:3": "4694x3520",
+    "3:4": "3520x4694",
+    "1:1": "4096x4096",
+    "3:2": "4992x3328",
+    "2:3": "3328x4992",
+  },
+};

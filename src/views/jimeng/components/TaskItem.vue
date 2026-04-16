@@ -246,7 +246,7 @@ const draggingSlot = ref<number | null>(null);
 const submitForm = ref<SubmitParam>({
   modelName: modelOptions[0]?.value ?? "jimeng_seedream46_cvtob",
   imageRatio: ratioOptions[0]?.value ?? "3.4",
-  imageSize: sizeOptions[0]?.value ?? "4K",
+  imageSize: sizeOptions[0]?.value ?? "3K",
 });
 
 watch(
@@ -343,7 +343,10 @@ async function handleChange(
     const allowed = fileType === "image/jpeg" || fileType === "image/png";
     if (!allowed) {
       uploadSlots.value[slotIndex] = [];
-      store.setError(String(props.taskId), "仅支持上传 JPG/JPEG 或 PNG 格式图片");
+      store.setError(
+        String(props.taskId),
+        "仅支持上传 JPG/JPEG 或 PNG 格式图片",
+      );
       return;
     }
   }
@@ -659,7 +662,7 @@ function viewHistoryEvent(item: HistoryImage) {
   currentText.value = item.context;
   store.viewHistoryItem(String(props.taskId), item);
 }
-
+import { recommendedSizeMap } from "../js/config";
 function submitBtn() {
   if (!currentText.value.trim()) {
     return;
@@ -694,6 +697,16 @@ function submitBtn() {
         "1:1": "2048x2048",
         "3:2": "2496x1664",
         "2:3": "1664x2496",
+      },
+      "3k": {
+        "21:9": "3840x1728",
+        "16:9": "3840x2160",
+        "9:16": "2160x3840",
+        "4:3": "3072x2304",
+        "3:4": "2304x3072",
+        "1:1": "3072x3072",
+        "3:2": "3072x2048",
+        "2:3": "2048x3072",
       },
       "4k": {
         "21:9": "6198x2656",
@@ -900,14 +913,17 @@ function submitBtn2() {
       const imageDataUrlList = await collectImageDataUrlList();
       const imageField =
         imageDataUrlList.length <= 1 ? imageDataUrlList[0] : imageDataUrlList;
-
       const payload = {
         model: submitForm.value.modelName,
-        prompt: currentText.value.trim(),
+        prompt:
+          currentText.value.trim() + `。返回的图片宽高像素值为${recommendedSizeMap[submitForm.value.imageSize]?.[submitForm.value.imageRatio]}。`,
         image: imageField,
+        size: submitForm.value.imageSize,
       };
-
-      const resp = await generateImagesByPromptV2Api(payload, abortController?.signal);
+      const resp = await generateImagesByPromptV2Api(
+        payload,
+        abortController?.signal,
+      );
       const firstUrl =
         resp?.data?.[0]?.url ??
         (Array.isArray(resp?.data) ? "" : (resp as any)?.data?.url) ??
@@ -924,6 +940,7 @@ function submitBtn2() {
         context: currentText.value,
       });
     } catch (err: any) {
+      console.log(err);
       if (abortRequestedByUser) return;
       const msg = err?.message ?? "V2 生成失败：请求已中断或超时";
       store.setError(taskId, msg);
