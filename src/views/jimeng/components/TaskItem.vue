@@ -209,6 +209,9 @@ import {
   generateImagesByPromptApi,
   generateImagesByPromptV2Api,
   getImageTaskResultApi,
+  linxfoxUploadByBase64Api,
+  linkfoxGetImageApi,
+  linkfoxGenerateApi,
   qianwenImageApi,
 } from "../../../api/images";
 import { useJimengTaskStore } from "../../../stores/jimengTaskStore";
@@ -573,8 +576,56 @@ async function collectImageDataUrlList() {
   return list.filter((x) => !!x);
 }
 
+async function collectImageUrlList() {
+  const slots = uploadSlots.value
+    .map((slot) => slot[0])
+    .filter(Boolean) as UploadWithMeta[];
+
+  const list = await Promise.all(
+    slots.map(async (file, idx) => {
+      if (file.url && isHttpUrl(file.url)) {
+        return file.url;
+      }
+
+      let fullBase64 = "";
+      if (file.url && /^data:image\/[^;]+;base64,/.test(file.url)) {
+        fullBase64 = file.url;
+      } else if (file.raw) {
+        fullBase64 = await getBase64(file.raw as File);
+      } else if (file.base64) {
+        const mime = file.mimeType || "image/png";
+        fullBase64 = `data:${mime};base64,${file.base64}`;
+      }
+
+      if (!fullBase64) return "";
+
+      const fileName =
+        file.name ||
+        (file.raw instanceof File
+          ? file.raw.name
+          : `upload-${Date.now()}-${idx}.png`);
+
+      const uploadResp = await linxfoxUploadByBase64Api({
+        fileName,
+        base64: fullBase64,
+      });
+
+      const outerCode = String(uploadResp?.code ?? "");
+      const innerCode = Number((uploadResp?.data as any)?.code ?? NaN);
+      const viewUrl = String((uploadResp?.data as any)?.data?.viewUrl ?? "");
+      if (outerCode !== "0" || innerCode !== 200 || !viewUrl) {
+        const errMsg = String((uploadResp?.data as any)?.msg ?? uploadResp?.msg ?? "上传图片失败");
+        throw new Error(errMsg);
+      }
+      return viewUrl;
+    }),
+  );
+
+  return list.filter((x: string) => !!x);
+}
+
 function validateUploadSizeLimit(taskId: string) {
-  const maxBytes = 20 * 1024 * 1024;
+  const maxBytes = 10 * 1024 * 1024;
   const files = uploadSlots.value
     .map((slot) => slot[0])
     .filter(Boolean) as UploadWithMeta[];
@@ -583,7 +634,7 @@ function validateUploadSizeLimit(taskId: string) {
     const raw = file.raw as File | undefined;
     if (!raw) continue;
     if (raw.size > maxBytes) {
-      store.setError(taskId, "上传图片大小不能超过20MB");
+      store.setError(taskId, "上传图片大小不能超过10MB");
       return false;
     }
   }
@@ -947,6 +998,14 @@ function submitBtn2() {
     return;
   }
 
+  const isLinkfoxModel =
+    selectedModel === "BANANA_2" || selectedModel === "BANANA_PRO";
+
+  if (isLinkfoxModel) {
+    void linkfoxImageImpl(taskId);
+    return;
+  }
+
   store.setError(taskId, "当前模型未接入 submitBtn2 逻辑");
 }
 
@@ -1033,7 +1092,7 @@ async function qianwenImageImpl(taskId: string) {
         watermark: false,
         n: 1,
         enable_interleave: false,
-        size:size.replace("x", "*"),
+        size: size.replace("x", "*"),
       },
     };
 
@@ -1059,6 +1118,113 @@ async function qianwenImageImpl(taskId: string) {
   } catch (err: any) {
     if (abortRequestedByUser) return;
     const msg = err?.message ?? "千问生成失败：请求已中断或超时";
+    store.setError(taskId, msg);
+  }
+}
+
+async function linkfoxResultImage(taskId: string, id: string): Promise<string> {
+  for (let i = 0; i < 120; i++) {
+    const queryResp = await linkfoxGetImageApi(
+      { id: String(id) },
+      abortController?.signal,
+    );
+
+    const outerCode = String(queryResp?.code ?? "");
+    const innerCode = Number((queryResp?.data as any)?.code ?? NaN);
+    if (outerCode !== "0" || innerCode !== 200) {
+      const errMsg = String((queryResp?.data as any)?.msg ?? queryResp?.msg ?? "unknown error");
+      store.setError(taskId, `Linkfox 查询失败：${errMsg}`);
+      return "";
+    }
+
+    const resultData = (queryResp?.data as any)?.data ?? {};
+    const firstUrl =
+      resultData?.resultList?.find(
+        (item: any) => item?.status === 1 && typeof item?.url === "string",
+      )?.url ??
+      resultData?.resultList?.[0]?.url ??
+      "";
+
+    const taskStatus = Number(resultData?.status ?? NaN);
+    if (taskStatus === 3 && firstUrl) {
+      return firstUrl;
+    }
+
+    if (taskStatus === 4) {
+      const errMsg =
+        resultData?.errorMsg ||
+        resultData?.resultList?.[0]?.errorMsg ||
+        "任务失败";
+      store.setError(taskId, `Linkfox 任务失败：${errMsg}`);
+      return "";
+    }
+
+    if (taskStatus === 3) {
+      store.setError(taskId, "Linkfox 任务完成但未返回图片URL");
+      return "";
+    }
+
+    if (taskStatus !== 1 && taskStatus !== 2) {
+      store.setError(taskId, `Linkfox 任务状态异常：${String(taskStatus || "unknown")}`);
+      return "";
+    }
+
+    await waitWithAbort(1500, abortController?.signal);
+  }
+
+  store.setError(taskId, "Linkfox 查询超时：未获取到图片URL");
+  return "";
+}
+
+async function linkfoxImageImpl(taskId: string) {
+  try {
+    if (!validateUploadSizeLimit(taskId)) return;
+
+    const imageList = await collectImageUrlList();
+    if (!imageList.length) {
+      store.setError(taskId, "请至少上传一张图片");
+      return;
+    }
+    const payload = {
+      imageList,
+      prompt: currentText.value.trim(),
+      provider: submitForm.value.modelName,
+      outputNum: 1,
+      resolution: submitForm.value.imageSize,
+      aspectRatio: submitForm.value.imageRatio,
+    };
+
+    const resp = await linkfoxGenerateApi(payload, abortController?.signal);
+    const outerCode = String(resp?.code ?? "");
+    const innerCode = Number(resp?.data?.code ?? NaN);
+    if (outerCode !== "0" || innerCode !== 200) {
+      store.setError(
+        taskId,
+        `Linkfox 生成失败：${resp?.data?.msg ?? resp?.msg ?? "unknown error"}`,
+      );
+      return;
+    }
+
+    const id = resp?.data?.data?.id;
+    if (!id) {
+      store.setError(taskId, "Linkfox 生成失败：未返回任务ID");
+      return;
+    }
+
+    const firstUrl = await linkfoxResultImage(taskId, String(id));
+
+    if (!firstUrl) {
+      return;
+    }
+
+    store.completeTaskWithPlaceholder(taskId, {
+      url: firstUrl,
+      code: "",
+      context: currentText.value,
+    });
+  } catch (err: any) {
+    if (abortRequestedByUser) return;
+    const msg = err?.message ?? "Linkfox 生成失败：请求已中断或超时";
     store.setError(taskId, msg);
   }
 }

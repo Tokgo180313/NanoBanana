@@ -131,6 +131,85 @@ export interface QianwenImageResponse {
   [key: string]: unknown
 }
 
+export interface LinkfoxGeneratePayload {
+  imageList: string[]
+  prompt: string
+  provider: 'BANANA_2' | 'BANANA_PRO' | string
+  outputNum?: number
+  resolution?: string
+}
+
+export interface LinkfoxGenerateResponse {
+  request_id?: string
+  traceId?: string
+  code?: string | number
+  msg?: string
+  data?: {
+    msg?: string
+    code?: string | number
+    traceId?: string
+    data?: {
+      id?: number | string
+      [key: string]: unknown
+    }
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
+export interface LinkfoxGetImagePayload {
+  id: string
+}
+
+export interface LinkfoxGetImageResponse {
+  msg?: string
+  code?: string | number
+  traceId?: string
+  data?: {
+    id?: string
+    status?: number
+    errorCode?: string
+    errorMsg?: string
+    resultList?: Array<{
+      id?: string
+      status?: number
+      errorCode?: string
+      errorMsg?: string
+      url?: string
+      width?: number
+      height?: number
+      format?: string
+      extendField?: Record<string, unknown>
+      [key: string]: unknown
+    }>
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
+export interface LinxfoxUploadByBase64Payload {
+  fileName: string
+  base64: string
+}
+
+export interface LinxfoxUploadByBase64Response {
+  traceId?: string
+  code?: string | number
+  msg?: string
+  data?: {
+    msg?: string
+    code?: string | number
+    traceId?: string
+    data?: {
+      viewUrl?: string
+      [key: string]: unknown
+    }
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
+
 export async function generateImagesByPromptApi(
   payload: GenerateImagesByPromptPayload,
   signal?: AbortSignal,
@@ -168,6 +247,45 @@ export async function qianwenImageApi(
     signal,
   }
   return request<QianwenImageResponse>(config)
+}
+
+export async function linkfoxGenerateApi(
+  payload: LinkfoxGeneratePayload,
+  signal?: AbortSignal,
+) {
+  const config: AxiosRequestConfig<LinkfoxGeneratePayload> = {
+    url: '/api/linkfox/generate',
+    method: 'post',
+    data: payload,
+    signal,
+  }
+  return request<LinkfoxGenerateResponse>(config)
+}
+
+export async function linkfoxGetImageApi(
+  payload: LinkfoxGetImagePayload,
+  signal?: AbortSignal,
+) {
+  const config: AxiosRequestConfig<LinkfoxGetImagePayload> = {
+    url: '/api/linkfox/getImage',
+    method: 'post',
+    data: payload,
+    signal,
+  }
+  return request<LinkfoxGetImageResponse>(config)
+}
+
+export async function linxfoxUploadByBase64Api(
+  payload: LinxfoxUploadByBase64Payload,
+  signal?: AbortSignal,
+) {
+  const config: AxiosRequestConfig<LinxfoxUploadByBase64Payload> = {
+    url: '/api/linkfox/uploadByBase64',
+    method: 'post',
+    data: payload,
+    signal,
+  }
+  return request<LinxfoxUploadByBase64Response>(config)
 }
 
 export interface FuseImagesPayload {

@@ -14,6 +14,9 @@ export const modelOptions: OptionItem[] = [
   { label: "qwen-image-2.0-pro", value: "qwen-image-2.0-pro", version: "1" },
   { label: "wan2.7-image-pro", value: "wan2.7-image-pro", version: "1" },
   { label: "wan2.7-image", value: "wan2.7-image", version: "1" },
+  { label: "linkfox-BANANA_2", value: "BANANA_2", version: "1" },
+  { label: "linkfox-BANANA_PRO", value: "BANANA_PRO", version: "1" },
+
 ];
 
 export const ratioOptions: OptionItem[] = [
