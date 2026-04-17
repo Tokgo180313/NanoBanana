@@ -3,6 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { JimengModule } from './jimeng/jimeng.module';
+import { LinkfoxModule } from './linkfox/linkfox.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { JimengModule } from './jimeng/jimeng.module';
       isGlobal: true,
     }),
     JimengModule,
+    LinkfoxModule,
   ],
   controllers: [AppController],
   providers: [AppService],
