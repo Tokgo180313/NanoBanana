@@ -839,7 +839,7 @@ function submitBtn() {
 
   const timeoutId = window.setTimeout(() => {
     abortController?.abort();
-  }, 120000);
+  }, 1200000);
   store.setRequestTimerId(taskId, timeoutId);
   (async () => {
     try {
@@ -975,7 +975,7 @@ function submitBtn2() {
 
   const timeoutId = window.setTimeout(() => {
     abortController?.abort();
-  }, 120000);
+  }, 1200000);
   store.setRequestTimerId(taskId, timeoutId);
 
   const selectedModel = submitForm.value.modelName;
