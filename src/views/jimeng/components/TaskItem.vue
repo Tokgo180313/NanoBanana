@@ -248,9 +248,9 @@ const uploadSlots = ref<UploadWithMeta[][]>(
 const draggingSlot = ref<number | null>(null);
 
 const submitForm = ref<SubmitParam>({
-  modelName: modelOptions[0]?.value ?? "jimeng_seedream46_cvtob",
+  modelName: modelOptions[0]?.value ?? "BANANA_2",
   imageRatio: ratioOptions[0]?.value ?? "3.4",
-  imageSize: sizeOptions[0]?.value ?? "3K",
+  imageSize: sizeOptions[0]?.value ?? "4k",
 });
 
 watch(
@@ -614,7 +614,9 @@ async function collectImageUrlList() {
       const innerCode = Number((uploadResp?.data as any)?.code ?? NaN);
       const viewUrl = String((uploadResp?.data as any)?.data?.viewUrl ?? "");
       if (outerCode !== "0" || innerCode !== 200 || !viewUrl) {
-        const errMsg = String((uploadResp?.data as any)?.msg ?? uploadResp?.msg ?? "上传图片失败");
+        const errMsg = String(
+          (uploadResp?.data as any)?.msg ?? uploadResp?.msg ?? "上传图片失败",
+        );
         throw new Error(errMsg);
       }
       return viewUrl;
@@ -1132,7 +1134,9 @@ async function linkfoxResultImage(taskId: string, id: string): Promise<string> {
     const outerCode = String(queryResp?.code ?? "");
     const innerCode = Number((queryResp?.data as any)?.code ?? NaN);
     if (outerCode !== "0" || innerCode !== 200) {
-      const errMsg = String((queryResp?.data as any)?.msg ?? queryResp?.msg ?? "unknown error");
+      const errMsg = String(
+        (queryResp?.data as any)?.msg ?? queryResp?.msg ?? "unknown error",
+      );
       store.setError(taskId, `Linkfox 查询失败：${errMsg}`);
       return "";
     }
@@ -1165,7 +1169,10 @@ async function linkfoxResultImage(taskId: string, id: string): Promise<string> {
     }
 
     if (taskStatus !== 1 && taskStatus !== 2) {
-      store.setError(taskId, `Linkfox 任务状态异常：${String(taskStatus || "unknown")}`);
+      store.setError(
+        taskId,
+        `Linkfox 任务状态异常：${String(taskStatus || "unknown")}`,
+      );
       return "";
     }
 
