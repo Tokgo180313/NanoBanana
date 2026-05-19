@@ -14,6 +14,7 @@ export interface TaskRuntimeState {
   responseErrorText: string
 
   responseLoading: boolean
+  generatedTaskId: string
   currentUrlCode: string
   currentUrl: string
 
@@ -27,6 +28,7 @@ function createDefaultRuntimeState(): TaskRuntimeState {
     responseErrorText: '',
 
     responseLoading: false,
+    generatedTaskId: '',
     currentUrlCode: '',
     currentUrl: '',
 
@@ -47,6 +49,7 @@ function toPersisted(runtime: TaskRuntimeState): PersistedTaskRuntimeState {
   return {
     showStatus: runtime.showStatus,
     responseErrorText: runtime.responseErrorText,
+    generatedTaskId: runtime.generatedTaskId,
     currentUrlCode: runtime.currentUrlCode,
     currentUrl: runtime.currentUrl,
     historyImageList: runtime.historyImageList,
@@ -68,6 +71,8 @@ function safeLoadTask(taskId: string): PersistedTaskRuntimeState | null {
           ? parsed.showStatus
           : '0',
       responseErrorText: typeof parsed.responseErrorText === 'string' ? parsed.responseErrorText : '',
+      generatedTaskId:
+        typeof parsed.generatedTaskId === 'string' ? parsed.generatedTaskId : '',
       currentUrlCode: typeof parsed.currentUrlCode === 'string' ? parsed.currentUrlCode : '',
       currentUrl: typeof parsed.currentUrl === 'string' ? parsed.currentUrl : '',
       historyImageList: Array.isArray(parsed.historyImageList)
@@ -128,6 +133,13 @@ export const useJimengTaskStore = defineStore('jimengTask', {
       runtime.showStatus = '1'
       runtime.responseLoading = true
       runtime.responseErrorText = ''
+      runtime.generatedTaskId = ''
+      this.persistTask(taskId)
+    },
+
+    setGeneratedTaskId(taskId: string, generatedTaskId: string) {
+      this.ensureTask(taskId)
+      this.tasks[taskId].generatedTaskId = generatedTaskId
       this.persistTask(taskId)
     },
 

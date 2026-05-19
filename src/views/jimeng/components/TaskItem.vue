@@ -3,7 +3,9 @@
     <el-card class="box-card" size="small">
       <template #header>
         <div class="box-header">
-          <div>任务 {{ taskId }}</div>
+          <div>
+            任务 {{ taskId }}<span v-if="generatedTaskId"> - {{ generatedTaskId }}</span>
+          </div>
           <div class="result-status">
             <div class="is-not-start status" v-if="showStatus === '0'">
               未开始
@@ -275,6 +277,9 @@ const responseLoading = computed(
 );
 const showStatus = computed(
   () => store.tasks[String(props.taskId)]?.showStatus ?? "0",
+);
+const generatedTaskId = computed(
+  () => store.tasks[String(props.taskId)]?.generatedTaskId ?? "",
 );
 const responseErrorText = computed(
   () => store.tasks[String(props.taskId)]?.responseErrorText ?? "",
@@ -900,6 +905,7 @@ function submitBtn() {
         store.setError(taskId, "生成失败：未获取到 task_id");
         return;
       }
+      store.setGeneratedTaskId(taskId, generatedTaskId);
 
       // 轮询任务结果：每 1~2 秒请求一次，直到 images 非空。
       for (let i = 0; i < 120; i++) {
@@ -1217,6 +1223,7 @@ async function linkfoxImageImpl(taskId: string) {
       store.setError(taskId, "Linkfox 生成失败：未返回任务ID");
       return;
     }
+    store.setGeneratedTaskId(taskId, String(id));
 
     const firstUrl = await linkfoxResultImage(taskId, String(id));
 
