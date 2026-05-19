@@ -16,7 +16,7 @@ export const modelOptions: OptionItem[] = [
   // { label: "wan2.7-image", value: "wan2.7-image", version: "1" },
   { label: "linkfox-BANANA_2", value: "BANANA_2", version: "1" },
   { label: "linkfox-BANANA_PRO", value: "BANANA_PRO", version: "1" },
-
+  { label: "linkfox-IMAGE-2", value: "GPT_2_IMAGE", version: "1" },
 ];
 
 export const ratioOptions: OptionItem[] = [

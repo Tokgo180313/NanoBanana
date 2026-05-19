@@ -945,7 +945,7 @@ function submitBtn() {
         }
 
         if (firstImageUrl) break;
-        await waitWithAbort(1500, abortController?.signal);
+        await waitWithAbort(15000, abortController?.signal);
       }
 
       if (!firstImageUrl) {
@@ -1007,7 +1007,7 @@ function submitBtn2() {
   }
 
   const isLinkfoxModel =
-    selectedModel === "BANANA_2" || selectedModel === "BANANA_PRO";
+    selectedModel === "BANANA_2" || selectedModel === "BANANA_PRO"||selectedModel === "GPT_2_IMAGE";
 
   if (isLinkfoxModel) {
     void linkfoxImageImpl(taskId);
@@ -1182,7 +1182,7 @@ async function linkfoxResultImage(taskId: string, id: string): Promise<string> {
       return "";
     }
 
-    await waitWithAbort(1500, abortController?.signal);
+    await waitWithAbort(15000, abortController?.signal);
   }
 
   store.setError(taskId, "Linkfox 查询超时：未获取到图片URL");
