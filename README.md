@@ -96,3 +96,20 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+
+## 统一权限中心接入
+
+所有图片业务接口现已要求IAM会话。新增配置、数据库迁移、测试方式和上线限制见[README-IAM.md](README-IAM.md)。原供应商.env保持独立，新增.env.iam不应提交。
+
+## MongoDB 与图片存储
+
+当前业务数据库使用本地 MongoDB，图片支持本地持久化目录或阿里云私有 OSS，数据库只存图片地址及元数据。数据库与历史迁移见 [README-MONGODB.md](README-MONGODB.md)，OSS 配置与连通性自检见 [README-OSS.md](README-OSS.md)。
+
+## 147AI Gemini 图片模型
+
+新增 Gemini 2.5 Flash 和 Gemini 3 Pro 的文生图及参考图编辑，沿用现有 IAM 鉴权、历史记录及私有 OSS 存储。配置和验证见 [README-147AI.md](README-147AI.md)。
+
+## 局域网访问
+
+局域网开发入口使用前端 5274 端口，支持同一地址下的 API 和身份登录，保留来源白名单及 CSRF 校验。启动方式及 IP 变化时的回调更新见 [README-LAN.md](README-LAN.md)。

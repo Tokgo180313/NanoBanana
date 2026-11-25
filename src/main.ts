@@ -1,9 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { json, urlencoded } from 'express';
+import { workbenchOrigins } from './iam/workbench-origins';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
   // Request body size limit (MB), configurable via env.
   const bodyLimitMb = Number(process.env.BODY_LIMIT_MB ?? '10');
   const bodyLimit =
@@ -28,22 +30,28 @@ async function bootstrap() {
       return res.status(400).json({
         code: 400,
         message: 'Invalid JSON in request body',
-        error: err.message,
       });
     }
 
     return next(err);
   });
   // CORS 配置
-  // - 默认允许所有来源（便于前期联调）
-  // - 若要限制来源：设置环境变量 `CORS_ORIGIN="http://a.com,http://b.com"`
-  const corsOrigins = process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
+  // Use exact configured origins for local and LAN sessions.
+  const corsOrigins =
+    process.env.CORS_ORIGIN?.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean) ??
+    workbenchOrigins(
+      process.env.WORKBENCH_ORIGIN || 'http://localhost:5174',
+      process.env.WORKBENCH_ORIGINS || '',
+    );
   app.enableCors({
-    origin: corsOrigins.length > 0 ? corsOrigins : true,
+    origin: corsOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',
       'Authorization',
+      'X-CSRF-Token',
       'X-Requested-With',
       'Accept',
       'Origin',
@@ -55,6 +63,5 @@ async function bootstrap() {
     optionsSuccessStatus: 204,
   });
   await app.listen(process.env.PORT ?? 3000);
-
 }
 bootstrap();

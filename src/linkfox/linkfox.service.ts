@@ -1,13 +1,19 @@
 import {
+  imageConnection,
+  type ProviderConnection,
+} from '../model-admin/generation-models.service';
+import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  ServiceUnavailableException,
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 export type LinkfoxGenerateRequest = {
+  [imageConnection]?: ProviderConnection;
   imageList?: string[];
   prompt?: string;
   provider?: string;
@@ -19,12 +25,14 @@ export type LinkfoxGenerateRequest = {
 };
 
 export type LinkfoxGetImageRequest = {
+  [imageConnection]?: ProviderConnection;
   id?: string;
   apiKey?: string;
   endpoint?: string;
 };
 
 export type LinkfoxUploadByBase64Request = {
+  [imageConnection]?: ProviderConnection;
   fileName?: string;
   base64?: string;
   apiKey?: string;
@@ -57,37 +65,27 @@ export class LinkfoxService {
       throw new BadRequestException('`prompt` is required');
     }
 
-    const apiKey =
-      body.apiKey?.trim() ?? this.configService.get<string>('LINKFOX_API_KEY');
-    if (!apiKey) {
-      throw new InternalServerErrorException(
-        'Missing LINKFOX_API_KEY in environment variables',
-      );
-    }
-
-    const endpoint =
-      body.endpoint?.trim() ??
-      this.configService.get<string>('LINKFOX_IMAGE_ENDPOINT');
-    if (!endpoint) {
-      throw new InternalServerErrorException(
-        'Missing LINKFOX_IMAGE_ENDPOINT in environment variables',
-      );
-    }
+    const connection = body[imageConnection];
+    if (!connection)
+      throw new ServiceUnavailableException('MODEL_PROVIDER_UNAVAILABLE');
+    const apiKey = connection.apiKey;
+    const endpoint = connection.apiUrl + '/make/multiImageFusionV2';
 
     const payload: Record<string, unknown> = {
       imageList,
       prompt,
-      provider: body.provider ?? 'BANANA_2',
+      provider: body.provider,
       outputNum: body.outputNum ?? 1,
       resolution: body.resolution ?? '4K',
       aspectRatio: body.aspectRatio ?? '1:1',
     };
 
     let response: Response;
-    console.log(endpoint, apiKey);
+
     try {
       response = await fetch(endpoint, {
         method: 'POST',
+        redirect: 'error',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
@@ -104,7 +102,7 @@ export class LinkfoxService {
       throw error;
     }
     const rawText = await response.text();
-    console.log(rawText);
+
     let parsed: unknown = rawText;
     try {
       parsed = rawText ? JSON.parse(rawText) : {};
@@ -146,17 +144,18 @@ export class LinkfoxService {
     }
 
     const apiKey =
-      body.apiKey?.trim() ?? this.configService.get<string>('LINKFOX_API_KEY');
+      body[imageConnection]?.apiKey ??
+      this.configService.get<string>('LINKFOX_API_KEY');
     if (!apiKey) {
       throw new InternalServerErrorException(
         'Missing LINKFOX_API_KEY in environment variables',
       );
     }
 
-    const endpoint =
-      body.endpoint?.trim() ??
-      this.configService.get<string>('LINKFOX_IMAGE_INFO_ENDPOINT') ??
-      'https://sbappstoreapi.ziniao.com/openapi-router/linkfox-ai/image/v2/make/info';
+    const endpoint = body[imageConnection]
+      ? body[imageConnection].apiUrl + '/make/info'
+      : (this.configService.get<string>('LINKFOX_IMAGE_INFO_ENDPOINT') ??
+        'https://sbappstoreapi.ziniao.com/openapi-router/linkfox-ai/image/v2/make/info');
 
     const payload: Record<string, unknown> = { id };
 
@@ -164,6 +163,7 @@ export class LinkfoxService {
     try {
       response = await fetch(endpoint, {
         method: 'POST',
+        redirect: 'error',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
@@ -227,18 +227,11 @@ export class LinkfoxService {
       throw new BadRequestException('`base64` is required');
     }
 
-    const apiKey =
-      body.apiKey?.trim() ?? this.configService.get<string>('LINKFOX_API_KEY');
-    if (!apiKey) {
-      throw new InternalServerErrorException(
-        'Missing LINKFOX_API_KEY in environment variables',
-      );
-    }
-
-    const endpoint =
-      body.endpoint?.trim() ??
-      this.configService.get<string>('LINKFOX_IMAGE_UPLOAD_ENDPOINT') ??
-      'https://sbappstoreapi.ziniao.com/openapi-router/linkfox-ai/image/v2/uploadByBase64';
+    const connection = body[imageConnection];
+    if (!connection)
+      throw new ServiceUnavailableException('MODEL_PROVIDER_UNAVAILABLE');
+    const apiKey = connection.apiKey;
+    const endpoint = connection.apiUrl + '/uploadByBase64';
 
     const payload: Record<string, unknown> = {
       fileName,
@@ -249,6 +242,7 @@ export class LinkfoxService {
     try {
       response = await fetch(endpoint, {
         method: 'POST',
+        redirect: 'error',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
@@ -264,7 +258,7 @@ export class LinkfoxService {
       );
       throw error;
     }
-    console.log(response);
+
     const rawText = await response.text();
     let parsed: unknown = rawText;
     try {

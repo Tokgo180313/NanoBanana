@@ -1,3 +1,6 @@
+import { UseGuards, UseInterceptors } from '@nestjs/common';
+import { IamSessionGuard } from '../iam/iam-session.guard';
+import { ImageGateway } from '../iam/image-gateway.interceptor';
 import { Body, Controller, Post } from '@nestjs/common';
 import {
   JimengService,
@@ -10,6 +13,8 @@ import {
 } from './jimeng.service';
 
 @Controller('/api')
+@UseGuards(IamSessionGuard)
+@UseInterceptors(ImageGateway)
 export class JimengController {
   constructor(private readonly jimengService: JimengService) {}
 
@@ -61,4 +66,3 @@ export class JimengController {
     return this.jimengService.qianwenImage(body);
   }
 }
-

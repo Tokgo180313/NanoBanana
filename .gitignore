@@ -54,3 +54,14 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# IAM session/database credentials (local only)
+.env.iam
+.env.iam.*
+!.env.iam.example
+
+/dist-iam
+.iam-build.tsbuildinfo
+
+# Local image files and private migration backups
+/data/

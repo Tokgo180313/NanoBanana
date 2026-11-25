@@ -1,3 +1,6 @@
+import { UseGuards, UseInterceptors } from '@nestjs/common';
+import { IamSessionGuard } from '../iam/iam-session.guard';
+import { ImageGateway } from '../iam/image-gateway.interceptor';
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import {
   LinkfoxService,
@@ -7,6 +10,8 @@ import {
 } from './linkfox.service';
 
 @Controller('/api/linkfox')
+@UseGuards(IamSessionGuard)
+@UseInterceptors(ImageGateway)
 export class LinkfoxController {
   constructor(private readonly linkfoxService: LinkfoxService) {}
 
