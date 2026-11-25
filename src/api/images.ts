@@ -139,6 +139,24 @@ export interface LinkfoxGeneratePayload {
   resolution?: string
 }
 
+export interface Ai147GeneratePayload {
+  model: 'gemini-2.5-flash-image' | 'gemini-3-pro-image-preview'
+  prompt: string
+  imageList: string[]
+  aspectRatio: string
+  resolution: string
+}
+
+export function ai147GenerateApi(payload: Ai147GeneratePayload, signal?: AbortSignal) {
+  return request<{ model: string; data: Array<{ url: string }> }>({
+    url: '/api/ai147/generate',
+    method: 'post',
+    data: payload,
+    timeout: 660000,
+    signal,
+  })
+}
+
 export interface LinkfoxGenerateResponse {
   request_id?: string
   traceId?: string
@@ -188,6 +206,7 @@ export interface LinkfoxGetImageResponse {
 }
 
 export interface LinxfoxUploadByBase64Payload {
+  modelId?: string
   fileName: string
   base64: string
 }

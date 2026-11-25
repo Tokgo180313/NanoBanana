@@ -6,6 +6,7 @@
 
     /* Linting */
     "strict": true,
+    "allowImportingTsExtensions": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,

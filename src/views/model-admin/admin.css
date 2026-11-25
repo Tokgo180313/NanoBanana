@@ -1,0 +1,7 @@
+.model-admin { padding: clamp(16px, 3vw, 32px); max-width: 1440px; margin: auto; }
+.model-admin .admin-header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.model-admin h1 { margin: 0; font-size: 24px; }
+.model-admin .admin-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.model-admin .admin-filters .el-select { width: min(100%, 180px); }
+.model-admin .admin-notice { margin-bottom: 16px; }
+.model-admin .admin-table { border: 1px solid var(--border); border-radius: 8px; }

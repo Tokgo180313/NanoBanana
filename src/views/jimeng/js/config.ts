@@ -1,3 +1,5 @@
+import { imageSizesForModel } from './model-capabilities.ts';
+
 export interface OptionItem {
   label: string;
   value: string;
@@ -14,9 +16,11 @@ export const modelOptions: OptionItem[] = [
   // { label: "qwen-image-2.0-pro", value: "qwen-image-2.0-pro", version: "1" },
   // { label: "wan2.7-image-pro", value: "wan2.7-image-pro", version: "1" },
   // { label: "wan2.7-image", value: "wan2.7-image", version: "1" },
-  { label: "linkfox-BANANA_2", value: "BANANA_2", version: "1" },
-  { label: "linkfox-BANANA_PRO", value: "BANANA_PRO", version: "1" },
-  { label: "linkfox-IMAGE-2", value: "GPT_2_IMAGE", version: "1" },
+  { label: "Banana 2 · Linkfox", value: "BANANA_2", version: "1" },
+  { label: "Banana Pro · Linkfox", value: "BANANA_PRO", version: "1" },
+  { label: "Image 2 · Linkfox", value: "GPT_2_IMAGE", version: "1" },
+  { label: "Gemini 2.5 Flash · 147AI", value: "gemini-2.5-flash-image", version: "1" },
+  { label: "Gemini 3 Pro · 147AI", value: "gemini-3-pro-image-preview", version: "1" },
 ];
 
 export const ratioOptions: OptionItem[] = [
@@ -35,6 +39,9 @@ export const sizeOptions: OptionItem[] = [
   // { label: "3K", value: "3K", version: "1" },
   { label: "4K", value: "4K", version: "1" },
 ];
+export function sizeOptionsForModel(model: string): OptionItem[] {
+  return imageSizesForModel(model).map(value => ({ label: model === 'gemini-2.5-flash-image' ? '约1K' : value, value }));
+}
 export const recommendedSizeMap: Record<string, Record<string, string>> = {
   "2K": {
     "1:1": "2048x2048",

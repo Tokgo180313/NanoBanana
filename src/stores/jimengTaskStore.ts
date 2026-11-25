@@ -1,4 +1,6 @@
+import { accountStorage } from '../account/storage.ts'
 import { defineStore } from 'pinia'
+import { useImageHistoryStore } from './imageHistoryStore.ts'
 
 export type TaskShowStatus = '0' | '1' | '2' | '3'
 
@@ -7,9 +9,13 @@ export interface HistoryImageItem {
   url: string
   code: string
   context: string
+  modelName?: string
+  settings?: { modelName: string; imageRatio: string; imageSize: string }
+  createdAt?: string
 }
 
 export interface TaskRuntimeState {
+  settings?: HistoryImageItem['settings']
   showStatus: TaskShowStatus
   responseErrorText: string
 
@@ -47,6 +53,7 @@ function getTaskStorageKey(taskId: string) {
 
 function toPersisted(runtime: TaskRuntimeState): PersistedTaskRuntimeState {
   return {
+    settings: runtime.settings,
     showStatus: runtime.showStatus,
     responseErrorText: runtime.responseErrorText,
     generatedTaskId: runtime.generatedTaskId,
@@ -58,11 +65,17 @@ function toPersisted(runtime: TaskRuntimeState): PersistedTaskRuntimeState {
 
 function safeLoadTask(taskId: string): PersistedTaskRuntimeState | null {
   try {
-    const raw = localStorage.getItem(getTaskStorageKey(taskId))
+    const raw = accountStorage.getItem(getTaskStorageKey(taskId))
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<PersistedTaskRuntimeState>
     if (!parsed || typeof parsed !== 'object') return null
+    const currentRecord = parsed.currentUrl && Array.isArray(parsed.historyImageList)
+      ? parsed.historyImageList.find(item => item?.url === parsed.currentUrl && item.code === parsed.currentUrlCode)
+      : undefined
+    const settings = parsed.settings ?? currentRecord?.settings
     return {
+      settings: settings && typeof settings.modelName === 'string' && typeof settings.imageRatio === 'string' && typeof settings.imageSize === 'string'
+        ? { ...settings } : undefined,
       showStatus:
         parsed.showStatus === '0' ||
         parsed.showStatus === '1' ||
@@ -85,19 +98,30 @@ function safeLoadTask(taskId: string): PersistedTaskRuntimeState | null {
 }
 
 export const useJimengTaskStore = defineStore('jimengTask', {
-  state: (): { tasks: Record<string, TaskRuntimeState> } => ({
+  state: (): { tasks: Record<string, TaskRuntimeState>; persistenceError: string } => ({
     tasks: {},
+    persistenceError: '',
   }),
 
   actions: {
+    setTaskSettings(taskId: string, settings: NonNullable<HistoryImageItem['settings']>) {
+      this.ensureTask(taskId)
+      this.tasks[taskId].settings = { ...settings }
+      this.persistTask(taskId)
+    },
     persistTask(taskId: string) {
       const runtime = this.tasks[taskId]
       if (!runtime) return
-      localStorage.setItem(getTaskStorageKey(taskId), JSON.stringify(toPersisted(runtime)))
+      try {
+        accountStorage.setItem(getTaskStorageKey(taskId), JSON.stringify(toPersisted(runtime)))
+        this.persistenceError = ''
+      } catch {
+        this.persistenceError = '浏览器存储空间不足，部分生成记录无法保存。请先下载重要图片，再清理本地历史。'
+      }
     },
 
     removePersistedTask(taskId: string) {
-      localStorage.removeItem(getTaskStorageKey(taskId))
+      accountStorage.removeItem(getTaskStorageKey(taskId))
     },
 
     ensureTask(taskId: string) {
@@ -179,7 +203,7 @@ export const useJimengTaskStore = defineStore('jimengTask', {
 
     completeTaskWithPlaceholder(
       taskId: string,
-      payload: { url: string; code: string; context: string },
+      payload: { url: string; code: string; context: string; modelName?: string; settings?: HistoryImageItem['settings'] },
     ) {
       this.ensureTask(taskId)
       const runtime = this.tasks[taskId]
@@ -202,9 +226,17 @@ export const useJimengTaskStore = defineStore('jimengTask', {
         url: payload.url,
         code: payload.code,
         context: payload.context,
+        modelName: payload.modelName,
+        settings: payload.settings ? { ...payload.settings } : undefined,
+        createdAt: new Date().toISOString(),
       })
-      runtime.historyImageList = runtime.historyImageList.slice(0, 3)
+      runtime.historyImageList = runtime.historyImageList.slice(0, 20)
       this.persistTask(taskId)
+      void useImageHistoryStore().record({
+        id: `${taskId}:${uid}`, taskId, url: payload.url, code: payload.code,
+        prompt: payload.context, modelName: payload.modelName, settings: payload.settings ? { ...payload.settings } : undefined,
+        createdAt: runtime.historyImageList[0]?.createdAt,
+      })
     },
 
     viewHistoryItem(taskId: string, item: HistoryImageItem) {
@@ -221,11 +253,9 @@ export const useJimengTaskStore = defineStore('jimengTask', {
     deleteHistoryItem(taskId: string, uid: string) {
       this.ensureTask(taskId)
       const runtime = this.tasks[taskId]
+      const removed = runtime.historyImageList.find((x) => x.uid === uid)
       runtime.historyImageList = runtime.historyImageList.filter((x) => x.uid !== uid)
-
-      const isCurrentDeleted = !runtime.historyImageList.some(
-        (x) => x.url === runtime.currentUrl && x.code === runtime.currentUrlCode,
-      )
+      const isCurrentDeleted = !!removed && removed.url === runtime.currentUrl && removed.code === runtime.currentUrlCode && !runtime.historyImageList.some(x => x.url === runtime.currentUrl && x.code === runtime.currentUrlCode)
       if (isCurrentDeleted) {
         runtime.currentUrlCode = ''
         runtime.currentUrl = ''
